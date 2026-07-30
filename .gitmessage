@@ -1,0 +1,12 @@
+# <类型>(<范围>): <简短描述>
+#
+# 类型:
+#   feat     新功能
+#   fix      修复
+#   docs     文档
+#   style    格式
+#   refactor 重构
+#   test     测试
+#   chore    杂项
+#
+# 范围: cli, go-server, cf-server, config, domain, fetcher, manager, service, etc.

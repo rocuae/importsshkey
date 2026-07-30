@@ -1,0 +1,92 @@
+.docs
+.temp
+.history
+.pi
+.opencode
+.serena
+.trae
+.DS_Store
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+go.sum
+
+# Build artifacts
+bin/
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+
+# Test files
+test.db
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Wrangler
+.wrangler/
+.dev.vars
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+*.log
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+.mypy_cache/
+.ruff_cache/

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  iskey-server:
+    build: .
+    container_name: iskey-server
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_DRIVER=sqlite
+      - DB_DSN=/data/iskey.db
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+    volumes:
+      - ./data:/data
+      - ./.env:/root/.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

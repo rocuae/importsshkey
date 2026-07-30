@@ -1,0 +1,225 @@
+// config 包负责加载和解析配置文件
+package config
+
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+// Config 全局配置
+type Config struct {
+	// Version 配置版本号（必填，当前仅支持 "v1"）
+	Version string `yaml:"version"`
+	// Defaults 全局默认配置
+	Defaults Defaults `yaml:"defaults"`
+	// Credentials 认证凭据定义
+	Credentials map[string]Credential `yaml:"credentials"`
+	// Sources 数据源定义
+	Sources map[string]SourceConfig `yaml:"sources"`
+}
+
+// Defaults 全局默认配置
+type Defaults struct {
+	// Output 目标 authorized_keys 文件路径，默认: ~/.ssh/authorized_keys
+	Output string `yaml:"output"`
+	// Timeout HTTP 请求超时时间（秒），默认: 10
+	Timeout int `yaml:"timeout"`
+	// InsecureSkipVerify 是否跳过 TLS 证书校验（仅限内网自签名），默认: false
+	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
+	// MaxRetries 拉取失败时的最大重试次数，默认: 3
+	MaxRetries int `yaml:"max_retries"`
+}
+
+// Credential 认证凭据
+type Credential struct {
+	// Type 认证类型: bearer / basic / none
+	Type string `yaml:"type"`
+	// ValueFromEnv 环境变量名（Bearer 类型）
+	ValueFromEnv string `yaml:"value_from_env"`
+	// UsernameFromEnv 环境变量名（Basic 类型）
+	UsernameFromEnv string `yaml:"username_from_env"`
+	// PasswordFromEnv 环境变量名（Basic 类型）
+	PasswordFromEnv string `yaml:"password_from_env"`
+	// ResolvedValue 解析后的值（Bearer 类型）
+	ResolvedValue string `yaml:"-"`
+	// ResolvedUsername 解析后的用户名（Basic 类型）
+	ResolvedUsername string `yaml:"-"`
+	// ResolvedPassword 解析后的密码（Basic 类型）
+	ResolvedPassword string `yaml:"-"`
+}
+
+// SourceConfig 数据源配置
+type SourceConfig struct {
+	// Alias 短别名，用于命令行快速引用
+	Alias string `yaml:"alias"`
+	// URL 静态 URL（如果不需要模板变量）
+	URL string `yaml:"url"`
+	// URLTemplate 模板 URL，支持 {{ .VarName }} 语法
+	URLTemplate string `yaml:"url_template"`
+	// Format 返回内容解析格式: plaintext 或 github_json，默认: plaintext
+	Format string `yaml:"format"`
+	// AuthRef 引用的凭证名称
+	AuthRef string `yaml:"auth_ref"`
+	// DefaultVars 默认模板变量值
+	DefaultVars map[string]string `yaml:"default_vars"`
+	// Enabled 是否启用该源，默认: true
+	Enabled *bool `yaml:"enabled"`
+}
+
+// IsEnabled 检查源是否启用
+// 返回：
+//   - bool: 是否启用（默认 true）
+func (s *SourceConfig) IsEnabled() bool {
+	if s.Enabled == nil {
+		return true
+	}
+	return *s.Enabled
+}
+
+// GetURL 获取 URL（优先使用静态 URL，其次使用模板 URL）
+// 返回：
+//   - string: URL 字符串
+func (s *SourceConfig) GetURL() string {
+	if s.URL != "" {
+		return s.URL
+	}
+	return s.URLTemplate
+}
+
+// Validate 验证配置是否合法
+// 返回：
+//   - error: 验证错误
+func (c *Config) Validate() error {
+	if c.Version == "" {
+		return fmt.Errorf("config version is required")
+	}
+	if c.Version != "v1" {
+		return fmt.Errorf("unsupported config version: %s (only v1 is supported)", c.Version)
+	}
+
+	// 验证数据源
+	for name, src := range c.Sources {
+		if src.URL == "" && src.URLTemplate == "" {
+			return fmt.Errorf("source %q: url or url_template is required", name)
+		}
+		if src.Format != "" && src.Format != "plaintext" && src.Format != "github_json" {
+			return fmt.Errorf("source %q: invalid format %q (must be plaintext or github_json)", name, src.Format)
+		}
+	}
+
+	return nil
+}
+
+// ResolveCredentials 解析所有凭证的环境变量值
+// 返回：
+//   - error: 环境变量缺失错误
+func (c *Config) ResolveCredentials() error {
+	for name, cred := range c.Credentials {
+		switch cred.Type {
+		case "bearer":
+			if cred.ValueFromEnv == "" {
+				return fmt.Errorf("credential %q: value_from_env is required for bearer type", name)
+			}
+			value := os.Getenv(cred.ValueFromEnv)
+			if value == "" {
+				return fmt.Errorf("credential %q: environment variable %s is not set", name, cred.ValueFromEnv)
+			}
+			cred.ResolvedValue = value
+			c.Credentials[name] = cred
+
+		case "basic":
+			if cred.UsernameFromEnv == "" || cred.PasswordFromEnv == "" {
+				return fmt.Errorf("credential %q: username_from_env and password_from_env are required for basic type", name)
+			}
+			username := os.Getenv(cred.UsernameFromEnv)
+			if username == "" {
+				return fmt.Errorf("credential %q: environment variable %s is not set", name, cred.UsernameFromEnv)
+			}
+			password := os.Getenv(cred.PasswordFromEnv)
+			if password == "" {
+				return fmt.Errorf("credential %q: environment variable %s is not set", name, cred.PasswordFromEnv)
+			}
+			cred.ResolvedUsername = username
+			cred.ResolvedPassword = password
+			c.Credentials[name] = cred
+
+		case "none", "":
+			// 无需认证
+
+		default:
+			return fmt.Errorf("credential %q: unsupported type %q (must be bearer, basic, or none)", name, cred.Type)
+		}
+	}
+
+	return nil
+}
+
+// GetCredential 获取指定名称的凭证
+// 参数：
+//   - name: 凭证名称
+//
+// 返回：
+//   - *Credential: 凭证对象（可能为 nil）
+//   - bool: 是否找到
+func (c *Config) GetCredential(name string) (*Credential, bool) {
+	if name == "" {
+		return nil, false
+	}
+	cred, ok := c.Credentials[name]
+	if !ok {
+		return nil, false
+	}
+	return &cred, true
+}
+
+// GetSource 获取指定别名的数据源
+// 参数：
+//   - alias: 源别名或名称
+//
+// 返回：
+//   - string: 源名称
+//   - *SourceConfig: 源配置
+//   - bool: 是否找到
+func (c *Config) GetSource(alias string) (string, *SourceConfig, bool) {
+	// 处理内置别名
+	switch alias {
+	case "gh":
+		alias = "github"
+	case "lp":
+		alias = "launchpad"
+	}
+
+	// 先按名称查找
+	if src, ok := c.Sources[alias]; ok {
+		return alias, &src, true
+	}
+
+	// 再按别名查找
+	for name, src := range c.Sources {
+		if src.Alias == alias {
+			return name, &src, true
+		}
+		// 去掉 "my-" 前缀匹配
+		cleaned := strings.TrimPrefix(name, "my-")
+		if cleaned == alias {
+			return name, &src, true
+		}
+	}
+
+	return "", nil, false
+}
+
+// GetEnabledSources 获取所有启用的数据源
+// 返回：
+//   - map[string]*SourceConfig: 源名称 -> 源配置
+func (c *Config) GetEnabledSources() map[string]*SourceConfig {
+	result := make(map[string]*SourceConfig)
+	for name, src := range c.Sources {
+		if src.IsEnabled() {
+			srcCopy := src
+			result[name] = &srcCopy
+		}
+	}
+	return result
+}
