@@ -55,6 +55,7 @@ TARGET 格式: [SOURCE_ALIAS|URL][:USERNAME]
 		}
 
 		printResult(result)
+		printOutputFile(mgr)
 		return nil
 	},
 }

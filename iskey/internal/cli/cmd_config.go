@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/rocuae/importsshkey/internal/config"
 	"github.com/rocuae/importsshkey/internal/fetcher"
@@ -138,22 +139,17 @@ var configSetCmd = &cobra.Command{
 			return fmt.Errorf("cannot override builtin source: %s", alias)
 		}
 
-		// 判断使用 url 还是 url_template
-		urlField := "url"
-		if containsTemplateVar(url) {
-			urlField = "url_template"
+		// 自动补充模板变量：无模板变量的 URL 自动追加 /keys/{{ .User }}
+		if !containsTemplateVar(url) {
+			url = strings.TrimRight(url, "/")
+			url += "/keys/{{ .User }}"
 		}
 
 		// 创建源配置
 		src := config.SourceConfig{
-			Alias:  alias,
-			Format: "plaintext",
-		}
-
-		if urlField == "url" {
-			src.URL = url
-		} else {
-			src.URLTemplate = url
+			Alias:       alias,
+			URLTemplate: url,
+			Format:      "plaintext",
 		}
 
 		// 加载现有配置

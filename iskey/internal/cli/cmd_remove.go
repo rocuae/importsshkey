@@ -33,6 +33,7 @@ TARGET 格式: [SOURCE_ALIAS|URL][:USERNAME]
 				return fmt.Errorf("remove failed: %w", err)
 			}
 			printResult(result)
+			printOutputFile(mgr)
 			return nil
 		}
 
@@ -42,15 +43,26 @@ TARGET 格式: [SOURCE_ALIAS|URL][:USERNAME]
 			if err != nil {
 				return fmt.Errorf("remove failed: %w", err)
 			}
+			status := "success"
+			action := "removed"
+			if removed == 0 {
+				status = "not_found"
+				action = "not_found"
+			}
 			if jsonOutput {
 				printResult(map[string]interface{}{
-					"status":  "success",
-					"removed": removed,
+					"status":  status,
+					"action":  action,
 					"source":  removeAllFromSource,
+					"removed": removed,
 				})
 			} else {
-				fmt.Printf("Removed %d keys from source %s\n", removed, removeAllFromSource)
+				fmt.Printf("Status:   %s\n", status)
+				fmt.Printf("Action:   %s\n", action)
+				fmt.Printf("Source:   %s\n", removeAllFromSource)
+				fmt.Printf("Removed:  %d key(s)\n", removed)
 			}
+			printOutputFile(mgr)
 			return nil
 		}
 
@@ -70,6 +82,7 @@ TARGET 格式: [SOURCE_ALIAS|URL][:USERNAME]
 		}
 
 		printResult(result)
+		printOutputFile(mgr)
 		return nil
 	},
 }

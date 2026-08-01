@@ -10,6 +10,7 @@ import (
 
 	"github.com/rocuae/importsshkey/internal/config"
 	"github.com/rocuae/importsshkey/internal/manager"
+	"github.com/rocuae/importsshkey/internal/service"
 	"github.com/spf13/cobra"
 )
 
@@ -158,6 +159,25 @@ func printResult(result interface{}) {
 //   - result: 结果对象
 func printTextResult(result interface{}) {
 	switch r := result.(type) {
+	case *service.AddResult:
+		fmt.Printf("Status:   %s\n", r.Status)
+		fmt.Printf("Action:   %s\n", r.Action)
+		fmt.Printf("User:     %s\n", r.User)
+		fmt.Printf("Source:   %s\n", r.Source)
+		fmt.Printf("Key:      %s\n", r.Fingerprint)
+	case *service.RemoveResult:
+		fmt.Printf("Status:   %s\n", r.Status)
+		fmt.Printf("Action:   %s\n", r.Action)
+		if r.Source != "" {
+			fmt.Printf("Source:   %s\n", r.Source)
+		}
+		if r.User != "" {
+			fmt.Printf("User:     %s\n", r.User)
+		}
+		if r.Fingerprint != "" {
+			fmt.Printf("Key:      %s\n", r.Fingerprint)
+		}
+		fmt.Printf("Removed:  %d key(s)\n", r.Removed)
 	case *manager.SyncResult:
 		if len(r.Added) > 0 {
 			fmt.Printf("Added: %d\n", len(r.Added))
@@ -175,5 +195,25 @@ func printTextResult(result interface{}) {
 		}
 	default:
 		fmt.Printf("%+v\n", result)
+	}
+}
+
+// printOutputFile 输出 authorized_keys 文件最终内容
+// 参数：
+//   - mgr: authorized_keys 管理器
+func printOutputFile(mgr *manager.Manager) {
+	lines, err := mgr.LoadAll()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading output file: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\n%s:\n", outputFile)
+	if len(lines) == 0 {
+		fmt.Println("(empty)")
+		return
+	}
+	for _, line := range lines {
+		fmt.Println(line)
 	}
 }

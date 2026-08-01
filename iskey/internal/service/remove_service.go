@@ -9,6 +9,14 @@ import (
 type RemoveResult struct {
 	// Status 操作状态
 	Status string
+	// Action 执行的动作: removed / not_found
+	Action string
+	// Source 来源标识
+	Source string
+	// User 用户名
+	User string
+	// Fingerprint 公钥指纹
+	Fingerprint string
 	// Removed 删除的条目数
 	Removed int
 	// Error 错误信息（如有）
@@ -48,12 +56,18 @@ func (s *RemoveService) Run(source, user, fingerprint string) (*RemoveResult, er
 	}
 
 	status := "success"
+	action := "removed"
 	if removed == 0 {
 		status = "not_found"
+		action = "not_found"
 	}
 
 	return &RemoveResult{
-		Status:  status,
-		Removed: removed,
+		Status:      status,
+		Action:      action,
+		Source:      source,
+		User:        user,
+		Fingerprint: fingerprint,
+		Removed:     removed,
 	}, nil
 }
