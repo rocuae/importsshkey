@@ -36,6 +36,7 @@ test.db
 # Node.js
 node_modules/
 package-lock.json
+cf-server/node_modules/
 
 # Wrangler
 .wrangler/

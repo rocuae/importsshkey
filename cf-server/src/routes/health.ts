@@ -3,6 +3,7 @@ import { Env } from '../types/env';
 
 const health = new Hono<{ Bindings: Env }>();
 
+/** GET /health — 健康检查端点，返回服务状态和版本信息 */
 health.get('/', async (c) => {
   return c.json({
     status: 'ok',

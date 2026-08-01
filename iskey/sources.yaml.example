@@ -1,0 +1,36 @@
+# iskey 配置文件
+# 默认路径: ~/.config/iskey/sources.yaml
+# 使用 iskey config init 生成此文件
+
+# 全局默认配置（选填，系统已有默认值）
+# defaults:
+#   output: "~/.ssh/authorized_keys"  # 默认值
+#   timeout: 10                        # 默认值
+#   max_retries: 3                     # 默认值
+
+# 认证凭据定义（选填，用于私有源）
+# 重要: Token 值必须从环境变量读取，YAML 中严禁硬编码
+credentials:
+  # my-gitlab-token:
+  #   type: bearer
+  #   value_from_env: GITLAB_PRIVATE_TOKEN
+
+# 数据源定义（选填）
+# 内置源 gh/lp 始终可用，无需配置
+# 使用方式: iskey add <alias>:<username>
+sources:
+  # iskey-server（自托管或 Cloudflare Workers）
+  # 修改 URL 指向实际部署地址
+  # keys-server:
+  #   alias: keys
+  #   url_template: "https://keys.example.com/keys/{{ .User }}"
+  #   format: plaintext
+  #   enabled: true
+
+  # 企业内部 GitLab 示例（需要认证）
+  # gitlab:
+  #   alias: work
+  #   url_template: "https://git.internal.com/users/{{ .User }}/keys"
+  #   format: plaintext
+  #   auth_ref: my-gitlab-token
+  #   enabled: true

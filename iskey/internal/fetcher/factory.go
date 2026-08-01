@@ -110,7 +110,51 @@ func resolveURL(source *config.SourceConfig, user string) (string, error) {
 func ResolveAlias(cfg *config.Config, alias string) (string, *config.SourceConfig, error) {
 	name, src, ok := cfg.GetSource(alias)
 	if !ok {
+		// 检查内置源
+		if builtin, exists := GetBuiltinSource(alias); exists {
+			return alias, builtin, nil
+		}
 		return "", nil, fmt.Errorf("source not found: %s", alias)
 	}
 	return name, src, nil
+}
+
+// GetBuiltinSource 获取内置数据源配置
+// 内置源无需在配置文件中定义，始终可用
+// 参数：
+//   - alias: 源别名
+//
+// 返回：
+//   - *SourceConfig: 源配置
+//   - bool: 是否为内置源
+func GetBuiltinSource(alias string) (*config.SourceConfig, bool) {
+	enabled := true
+	switch alias {
+	case "gh", "github":
+		return &config.SourceConfig{
+			Alias:       "gh",
+			URLTemplate: "https://api.github.com/users/{{ .User }}/keys",
+			Format:      "github_json",
+			Enabled:     &enabled,
+		}, true
+	case "lp", "launchpad":
+		return &config.SourceConfig{
+			Alias:       "lp",
+			URLTemplate: "https://launchpad.net/~{{ .User }}/+sshkeys",
+			Format:      "plaintext",
+			Enabled:     &enabled,
+		}, true
+	}
+	return nil, false
+}
+
+// IsBuiltinSource 检查是否为内置源
+// 参数：
+//   - alias: 源别名
+//
+// 返回：
+//   - bool: 是否为内置源
+func IsBuiltinSource(alias string) bool {
+	_, ok := GetBuiltinSource(alias)
+	return ok
 }

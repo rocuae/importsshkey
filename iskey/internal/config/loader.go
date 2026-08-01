@@ -87,7 +87,7 @@ func (l *Loader) LoadOrDefault() (*Config, error) {
 	if err != nil {
 		// 如果是配置文件不存在，返回默认配置
 		if strings.Contains(err.Error(), "config file not found") {
-			return defaultConfig(), nil
+			return DefaultConfig(), nil
 		}
 		return nil, err
 	}
@@ -152,35 +152,5 @@ func setDefaults(cfg *Config) {
 			src.Alias = name
 		}
 		cfg.Sources[name] = src
-	}
-}
-
-// defaultConfig 返回默认配置
-// 返回：
-//   - *Config: 默认配置对象
-func defaultConfig() *Config {
-	enabled := true
-	return &Config{
-		Version: "v1",
-		Defaults: Defaults{
-			Output:     "~/.ssh/authorized_keys",
-			Timeout:    10,
-			MaxRetries: 3,
-		},
-		Credentials: make(map[string]Credential),
-		Sources: map[string]SourceConfig{
-			"github": {
-				Alias:       "gh",
-				URLTemplate: "https://api.github.com/users/{{ .User }}/keys",
-				Format:      "github_json",
-				Enabled:     &enabled,
-			},
-			"launchpad": {
-				Alias:       "lp",
-				URLTemplate: "https://launchpad.net/~{{ .User }}/+sshkeys",
-				Format:      "plaintext",
-				Enabled:     &enabled,
-			},
-		},
 	}
 }

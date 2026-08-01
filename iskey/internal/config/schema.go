@@ -9,8 +9,6 @@ import (
 
 // Config 全局配置
 type Config struct {
-	// Version 配置版本号（必填，当前仅支持 "v1"）
-	Version string `yaml:"version"`
 	// Defaults 全局默认配置
 	Defaults Defaults `yaml:"defaults"`
 	// Credentials 认证凭据定义
@@ -91,13 +89,6 @@ func (s *SourceConfig) GetURL() string {
 // 返回：
 //   - error: 验证错误
 func (c *Config) Validate() error {
-	if c.Version == "" {
-		return fmt.Errorf("config version is required")
-	}
-	if c.Version != "v1" {
-		return fmt.Errorf("unsupported config version: %s (only v1 is supported)", c.Version)
-	}
-
 	// 验证数据源
 	for name, src := range c.Sources {
 		if src.URL == "" && src.URLTemplate == "" {
@@ -222,4 +213,50 @@ func (c *Config) GetEnabledSources() map[string]*SourceConfig {
 		}
 	}
 	return result
+}
+
+// AddSource 添加数据源
+// 参数：
+//   - name: 源名称
+//   - src: 源配置
+func (c *Config) AddSource(name string, src SourceConfig) {
+	if c.Sources == nil {
+		c.Sources = make(map[string]SourceConfig)
+	}
+	c.Sources[name] = src
+}
+
+// RemoveSource 移除数据源
+// 参数：
+//   - name: 源名称或别名
+//
+// 返回：
+//   - bool: 是否找到并移除
+func (c *Config) RemoveSource(name string) bool {
+	// 先按名称查找
+	if _, ok := c.Sources[name]; ok {
+		delete(c.Sources, name)
+		return true
+	}
+
+	// 再按别名查找
+	for key, src := range c.Sources {
+		if src.Alias == name {
+			delete(c.Sources, key)
+			return true
+		}
+	}
+
+	return false
+}
+
+// HasSource 检查数据源是否存在
+// 参数：
+//   - name: 源名称或别名
+//
+// 返回：
+//   - bool: 是否存在
+func (c *Config) HasSource(name string) bool {
+	_, _, ok := c.GetSource(name)
+	return ok
 }

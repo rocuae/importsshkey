@@ -8,11 +8,49 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	// configOutput 输出路径
+	configOutput string
+	// configForce 强制覆盖
+	configForce bool
+)
+
 // configCmd 配置管理命令
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "管理配置文件",
 	Long:  "查看、添加、移除数据源配置。",
+}
+
+// configInitCmd 初始化配置
+var configInitCmd = &cobra.Command{
+	Use:   "init",
+	Short: "生成默认配置文件",
+	Long: `生成默认配置文件到指定路径。
+
+默认路径: ~/.config/iskey/sources.yaml`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		outputPath := configOutput
+		if outputPath == "" {
+			outputPath = config.DefaultConfigPath()
+		}
+
+		// 检查文件是否存在
+		if _, err := os.Stat(outputPath); err == nil && !configForce {
+			return fmt.Errorf("config file already exists: %s (use --force to overwrite)", outputPath)
+		}
+
+		// 生成默认配置
+		defaultCfg := config.DefaultConfig()
+
+		// 保存到文件
+		if err := defaultCfg.SaveToFile(outputPath); err != nil {
+			return fmt.Errorf("save config: %w", err)
+		}
+
+		fmt.Printf("Config file created: %s\n", outputPath)
+		return nil
+	},
 }
 
 // configListCmd 列出配置
@@ -25,26 +63,59 @@ var configListCmd = &cobra.Command{
 		}
 
 		if jsonOutput {
-			printResult(cfg.Sources)
+			result := map[string]interface{}{
+				"builtin": getBuiltinSources(),
+				"custom":  cfg.Sources,
+			}
+			printResult(result)
 			return nil
 		}
 
-		fmt.Println("Configured sources:")
-		for name, src := range cfg.Sources {
-			enabled := "enabled"
-			if !src.IsEnabled() {
-				enabled = "disabled"
+		// 显示内置源
+		fmt.Println("Builtin sources:")
+		fmt.Println("  gh (github) - GitHub")
+		fmt.Println("  lp (launchpad) - Launchpad")
+		fmt.Println()
+
+		// 显示用户配置的源
+		if len(cfg.Sources) > 0 {
+			fmt.Println("Configured sources:")
+			for name, src := range cfg.Sources {
+				enabled := "enabled"
+				if !src.IsEnabled() {
+					enabled = "disabled"
+				}
+				fmt.Printf("  %s (%s) - %s\n", name, src.Alias, enabled)
+				if src.URL != "" {
+					fmt.Printf("    URL: %s\n", src.URL)
+				} else if src.URLTemplate != "" {
+					fmt.Printf("    URL Template: %s\n", src.URLTemplate)
+				}
+				fmt.Printf("    Format: %s\n", src.Format)
 			}
-			fmt.Printf("  %s (%s) - %s\n", name, src.Alias, enabled)
-			if src.URL != "" {
-				fmt.Printf("    URL: %s\n", src.URL)
-			} else if src.URLTemplate != "" {
-				fmt.Printf("    URL Template: %s\n", src.URLTemplate)
-			}
-			fmt.Printf("    Format: %s\n", src.Format)
 		}
+
 		return nil
 	},
+}
+
+// getBuiltinSources 获取内置源配置
+func getBuiltinSources() map[string]config.SourceConfig {
+	enabled := true
+	return map[string]config.SourceConfig{
+		"github": {
+			Alias:       "gh",
+			URLTemplate: "https://api.github.com/users/{{ .User }}/keys",
+			Format:      "github_json",
+			Enabled:     &enabled,
+		},
+		"launchpad": {
+			Alias:       "lp",
+			URLTemplate: "https://launchpad.net/~{{ .User }}/+sshkeys",
+			Format:      "plaintext",
+			Enabled:     &enabled,
+		},
+	}
 }
 
 // configSetCmd 添加配置
@@ -53,8 +124,49 @@ var configSetCmd = &cobra.Command{
 	Short: "快速添加数据源",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: 实现 config set
-		fmt.Printf("config set: %s -> %s\n", args[0], args[1])
+		alias := args[0]
+		url := args[1]
+
+		// 判断使用 url 还是 url_template
+		urlField := "url"
+		if containsTemplateVar(url) {
+			urlField = "url_template"
+		}
+
+		// 创建源配置
+		src := config.SourceConfig{
+			Alias:  alias,
+			Format: "plaintext",
+		}
+
+		if urlField == "url" {
+			src.URL = url
+		} else {
+			src.URLTemplate = url
+		}
+
+		// 加载现有配置
+		configPath := expandPath(configFile)
+		loader := config.NewLoader(configPath)
+		loadedCfg, err := loader.LoadOrDefault()
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
+
+		// 检查是否已存在
+		if loadedCfg.HasSource(alias) {
+			return fmt.Errorf("source %q already exists (use 'iskey config unset %s' to remove first)", alias, alias)
+		}
+
+		// 添加源
+		loadedCfg.AddSource(alias, src)
+
+		// 保存配置
+		if err := loadedCfg.SaveToFile(configPath); err != nil {
+			return fmt.Errorf("save config: %w", err)
+		}
+
+		fmt.Printf("Source %q added to %s\n", alias, configPath)
 		return nil
 	},
 }
@@ -65,8 +177,27 @@ var configUnsetCmd = &cobra.Command{
 	Short: "移除数据源",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: 实现 config unset
-		fmt.Printf("config unset: %s\n", args[0])
+		alias := args[0]
+
+		// 加载配置
+		configPath := expandPath(configFile)
+		loader := config.NewLoader(configPath)
+		loadedCfg, err := loader.Load()
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
+
+		// 移除源
+		if !loadedCfg.RemoveSource(alias) {
+			return fmt.Errorf("source %q not found", alias)
+		}
+
+		// 保存配置
+		if err := loadedCfg.SaveToFile(configPath); err != nil {
+			return fmt.Errorf("save config: %w", err)
+		}
+
+		fmt.Printf("Source %q removed from %s\n", alias, configPath)
 		return nil
 	},
 }
@@ -91,7 +222,6 @@ var configVerifyCmd = &cobra.Command{
 		}
 
 		fmt.Println("Config file is valid.")
-		fmt.Printf("Version: %s\n", loadedCfg.Version)
 		fmt.Printf("Sources: %d\n", len(loadedCfg.Sources))
 		fmt.Printf("Credentials: %d\n", len(loadedCfg.Credentials))
 		return nil
@@ -99,8 +229,28 @@ var configVerifyCmd = &cobra.Command{
 }
 
 func init() {
+	// init 命令参数
+	configInitCmd.Flags().StringVarP(&configOutput, "output", "o", "", "输出路径（默认 ~/.config/iskey/sources.yaml）")
+	configInitCmd.Flags().BoolVarP(&configForce, "force", "f", false, "强制覆盖已存在的文件")
+
+	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configListCmd)
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configUnsetCmd)
 	configCmd.AddCommand(configVerifyCmd)
+}
+
+// containsTemplateVar 检查字符串是否包含模板变量
+// 参数：
+//   - s: 字符串
+//
+// 返回：
+//   - bool: 是否包含 {{ .Var }} 格式的模板变量
+func containsTemplateVar(s string) bool {
+	for i := 0; i < len(s)-4; i++ {
+		if s[i] == '{' && s[i+1] == '{' && s[i+2] == ' ' && s[i+3] == '.' {
+			return true
+		}
+	}
+	return false
 }

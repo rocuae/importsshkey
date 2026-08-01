@@ -1,18 +1,44 @@
 {
+  // JSON Schema，用于 IDE 自动补全和校验
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "iskey-server",
+
+  // Worker 名称，部署后可通过 <name>.workers.dev 访问
+  "name": "iskey",
+
+  // 入口文件路径
   "main": "src/index.ts",
-  "compatibility_date": "2024-01-29",
+
+  // 兼容性日期，影响运行时行为
+  // 更新此值可启用新特性，详见 https://developers.cloudflare.com/workers/platform/compatibility-dates/
+  "compatibility_date": "2025-02-04",
+
+  // 兼容性标志
+  // nodejs_compat: 启用 Node.js 兼容 API
   "compatibility_flags": ["nodejs_compat"],
+
+  // 可观测性配置
+  // 启用后可在 Cloudflare Dashboard 查看 Worker 的日志和指标
+  "observability": {
+    "enabled": true
+  },
+  // KV 命名空间绑定
+  // KV 名称: iskey
+  // 创建命令: wrangler kv:namespace create "iskey"
   "kv_namespaces": [
     {
-      "binding": "PUBLIC_KEYS",
-      "id": "your-kv-namespace-id",
-      "preview_id": "your-preview-kv-namespace-id"
+      "binding": "KV",         // 代码中通过 env.KV 访问
+      "id": "582acbc86c0644d69ec0500e47b872dd",     // 生产环境KV ID: iskey
+      "preview_id": "your-preview-kv-namespace-id"  // 本地开发预览 ID
     }
   ],
+
+  // 环境变量（非敏感配置）
   "vars": {
-    "API_VERSION": "v1",
-    "ALLOWED_ORIGINS": "*"
-  }
+    "API_VERSION": "v1",                // API 版本号
+    "ALLOWED_ORIGINS": "*"              // CORS 允许的来源，生产环境建议限制为具体域名
+  },
+
+  // 敏感配置（如 ADMIN_TOKEN）请使用 wrangler secret put 设置：
+  //   wrangler secret put ADMIN_TOKEN
+  // 代码中通过 env.ADMIN_TOKEN 访问
 }

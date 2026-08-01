@@ -5,9 +5,10 @@ import { adminAuth } from '../middleware/auth';
 
 const keys = new Hono<{ Bindings: Env }>();
 
+/** GET /keys/:username — 获取指定用户的 SSH 公钥（纯文本返回，兼容 sshd AuthorizedKeysCommand） */
 keys.get('/:username', async (c) => {
   const username = c.req.param('username');
-  
+
   if (!username || username.length === 0) {
     return c.json({ error: 'Username is required' }, 400);
   }
@@ -22,6 +23,7 @@ keys.get('/:username', async (c) => {
   return c.text(publicKey);
 });
 
+/** GET /keys/:username/metadata — 获取公钥及其元数据（更新时间、来源等） */
 keys.get('/:username/metadata', async (c) => {
   const username = c.req.param('username');
   const kv = new KVService(c.env);
@@ -38,6 +40,7 @@ keys.get('/:username/metadata', async (c) => {
   });
 });
 
+/** PUT /keys/:username — 写入或更新 SSH 公钥（需要 Bearer token 鉴权） */
 keys.put('/:username', adminAuth, async (c) => {
   const username = c.req.param('username');
   const body = await c.req.json<{ public_key: string; source?: string }>();
@@ -46,6 +49,7 @@ keys.put('/:username', adminAuth, async (c) => {
     return c.json({ error: 'public_key is required' }, 400);
   }
 
+  // 校验 SSH 公钥格式（必须以 ssh- 开头）
   if (!body.public_key.trim().startsWith('ssh-')) {
     return c.json({ error: 'Invalid SSH public key format' }, 400);
   }
@@ -61,10 +65,11 @@ keys.put('/:username', adminAuth, async (c) => {
   });
 });
 
+/** DELETE /keys/:username — 删除指定用户的 SSH 公钥（需要 Bearer token 鉴权） */
 keys.delete('/:username', adminAuth, async (c) => {
   const username = c.req.param('username');
   const kv = new KVService(c.env);
-  
+
   const existing = await kv.getPublicKey(username);
   if (!existing) {
     return c.json({ error: 'User not found' }, 404);
@@ -79,10 +84,11 @@ keys.delete('/:username', adminAuth, async (c) => {
   });
 });
 
+/** GET /keys — 列出所有用户（需要 Bearer token 鉴权） */
 keys.get('/', adminAuth, async (c) => {
   const kv = new KVService(c.env);
   const users = await kv.listUsers();
-  
+
   return c.json({
     total: users.length,
     users,

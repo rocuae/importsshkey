@@ -39,6 +39,7 @@ func main() {
 	// 初始化处理器
 	keyHandler := handler.NewKeyHandler(userRepo, auditLogRepo)
 	healthHandler := handler.NewHealthHandler()
+	pageHandler := handler.NewPageHandler(userRepo)
 
 	// 创建 Gin 引擎
 	r := gin.Default()
@@ -47,12 +48,16 @@ func main() {
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
 	r.Use(middleware.Logger())
 
+	// 主页面和统计接口（公开）
+	r.GET("/", pageHandler.Page)
+	r.GET("/stats", pageHandler.StatsAPI)
+
 	// 健康检查
 	r.GET("/health", healthHandler.Health)
 
-	// 公开路由（无需认证）
-	r.GET("/keys/:username", keyHandler.GetKey)
-	r.GET("/keys/:username/metadata", keyHandler.GetKeyMetadata)
+	// 公开路由（需要认证）
+	r.GET("/keys/:username", middleware.AdminAuth(cfg), keyHandler.GetKey)
+	r.GET("/keys/:username/metadata", middleware.AdminAuth(cfg), keyHandler.GetKeyMetadata)
 
 	// 管理路由（需要 Bearer Token 认证）
 	admin := r.Group("/keys")
