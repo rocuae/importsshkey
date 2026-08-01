@@ -91,3 +91,7 @@ venv.bak/
 .python-version
 .mypy_cache/
 .ruff_cache/
+
+# Pix Agent
+.pi/
+.pi-lens/
