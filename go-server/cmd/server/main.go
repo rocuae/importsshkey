@@ -10,11 +10,11 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/importsshkey/iskey-server/internal/config"
-	"github.com/importsshkey/iskey-server/internal/handler"
-	"github.com/importsshkey/iskey-server/internal/middleware"
-	"github.com/importsshkey/iskey-server/internal/model"
-	"github.com/importsshkey/iskey-server/internal/repository"
+	"github.com/rocuae/importsshkey/go-server/internal/config"
+	"github.com/rocuae/importsshkey/go-server/internal/handler"
+	"github.com/rocuae/importsshkey/go-server/internal/middleware"
+	"github.com/rocuae/importsshkey/go-server/internal/model"
+	"github.com/rocuae/importsshkey/go-server/internal/repository"
 )
 
 func main() {

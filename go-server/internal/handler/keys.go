@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/importsshkey/iskey-server/internal/model"
-	"github.com/importsshkey/iskey-server/internal/repository"
-	"github.com/importsshkey/iskey-server/pkg/validator"
+	"github.com/rocuae/importsshkey/go-server/internal/model"
+	"github.com/rocuae/importsshkey/go-server/internal/repository"
+	"github.com/rocuae/importsshkey/go-server/pkg/validator"
 )
 
 // KeyHandler 公钥处理器

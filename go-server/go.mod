@@ -1,4 +1,4 @@
-module github.com/importsshkey/iskey-server
+module github.com/rocuae/importsshkey/go-server
 
 go 1.25.6
 

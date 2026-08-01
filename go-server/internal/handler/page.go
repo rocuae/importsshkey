@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/importsshkey/iskey-server/internal/repository"
+	"github.com/rocuae/importsshkey/go-server/internal/repository"
 )
 
 // PageHandler 页面处理器

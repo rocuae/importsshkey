@@ -2,7 +2,7 @@
 package repository
 
 import (
-	"github.com/importsshkey/iskey-server/internal/model"
+	"github.com/rocuae/importsshkey/go-server/internal/model"
 )
 
 // UserRepository 用户数据仓储接口

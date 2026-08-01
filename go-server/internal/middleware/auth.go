@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/importsshkey/iskey-server/internal/config"
+	"github.com/rocuae/importsshkey/go-server/internal/config"
 )
 
 // AdminAuth 管理员认证中间件

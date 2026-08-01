@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/ssh"
-	"github.com/importsshkey/iskey-server/internal/model"
+	"github.com/rocuae/importsshkey/go-server/internal/model"
 )
 
 // ValidatePublicKey 校验 SSH 公钥格式是否合法
