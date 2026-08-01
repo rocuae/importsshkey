@@ -1,8 +1,8 @@
 package service
 
 import (
-	"github.com/importsshkey/importsshkey/internal/config"
-	"github.com/importsshkey/importsshkey/internal/manager"
+	"github.com/rocuae/importsshkey/internal/config"
+	"github.com/rocuae/importsshkey/internal/manager"
 )
 
 // RemoveResult 移除操作的结果

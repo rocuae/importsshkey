@@ -4,7 +4,7 @@ package fetcher
 import (
 	"context"
 
-	"github.com/importsshkey/importsshkey/internal/domain"
+	"github.com/rocuae/importsshkey/internal/domain"
 )
 
 // Fetcher 定义拉取公钥列表的能力

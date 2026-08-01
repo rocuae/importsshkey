@@ -1,9 +1,9 @@
 package service
 
 import (
-	"github.com/importsshkey/importsshkey/internal/config"
-	"github.com/importsshkey/importsshkey/internal/domain"
-	"github.com/importsshkey/importsshkey/internal/manager"
+	"github.com/rocuae/importsshkey/internal/config"
+	"github.com/rocuae/importsshkey/internal/domain"
+	"github.com/rocuae/importsshkey/internal/manager"
 )
 
 // ListResult 列表操作的结果

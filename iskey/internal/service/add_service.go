@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/importsshkey/importsshkey/internal/config"
-	"github.com/importsshkey/importsshkey/internal/fetcher"
-	"github.com/importsshkey/importsshkey/internal/manager"
+	"github.com/rocuae/importsshkey/internal/config"
+	"github.com/rocuae/importsshkey/internal/fetcher"
+	"github.com/rocuae/importsshkey/internal/manager"
 )
 
 // AddResult 添加操作的结果

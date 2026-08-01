@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/importsshkey/importsshkey/internal/domain"
+	"github.com/rocuae/importsshkey/internal/domain"
 )
 
 // GitHubFetcher GitHub 公钥拉取器

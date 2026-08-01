@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/importsshkey/importsshkey/internal/config"
-	"github.com/importsshkey/importsshkey/internal/domain"
-	"github.com/importsshkey/importsshkey/internal/manager"
+	"github.com/rocuae/importsshkey/internal/config"
+	"github.com/rocuae/importsshkey/internal/domain"
+	"github.com/rocuae/importsshkey/internal/manager"
 )
 
 // SyncResult 同步操作的结果

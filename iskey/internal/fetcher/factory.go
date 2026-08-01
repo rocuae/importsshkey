@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"text/template"
 
-	"github.com/importsshkey/importsshkey/internal/config"
+	"github.com/rocuae/importsshkey/internal/config"
 )
 
 // Factory 根据源配置创建对应的 Fetcher

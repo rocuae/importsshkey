@@ -5,7 +5,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/importsshkey/importsshkey/internal/service"
+	"github.com/rocuae/importsshkey/internal/service"
 	"github.com/spf13/cobra"
 )
 

@@ -1,4 +1,4 @@
-module github.com/importsshkey/importsshkey
+module github.com/rocuae/importsshkey
 
 go 1.25.6
 

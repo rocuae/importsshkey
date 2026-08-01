@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/importsshkey/importsshkey/internal/domain"
+	"github.com/rocuae/importsshkey/internal/domain"
 )
 
 // HTTPFetcher 通用 HTTP 公钥拉取器

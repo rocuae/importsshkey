@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/importsshkey/importsshkey/internal/config"
+	"github.com/rocuae/importsshkey/internal/config"
+	"github.com/rocuae/importsshkey/internal/fetcher"
 	"github.com/spf13/cobra"
 )
 
@@ -72,14 +73,14 @@ var configListCmd = &cobra.Command{
 		}
 
 		// 显示内置源
-		fmt.Println("Builtin sources:")
-		fmt.Println("  gh (github) - GitHub")
-		fmt.Println("  lp (launchpad) - Launchpad")
+		fmt.Println("Builtin sources (always available):")
+		fmt.Println("  gh  - github    - https://api.github.com/users/{user}/keys")
+		fmt.Println("  lp  - launchpad - https://launchpad.net/~{user}/+sshkeys")
 		fmt.Println()
 
 		// 显示用户配置的源
 		if len(cfg.Sources) > 0 {
-			fmt.Println("Configured sources:")
+			fmt.Println("Custom sources:")
 			for name, src := range cfg.Sources {
 				enabled := "enabled"
 				if !src.IsEnabled() {
@@ -93,6 +94,11 @@ var configListCmd = &cobra.Command{
 				}
 				fmt.Printf("    Format: %s\n", src.Format)
 			}
+		} else {
+			fmt.Println("Custom sources: none")
+			fmt.Println()
+			fmt.Println("Add a custom source:")
+			fmt.Println("  iskey config set <alias> <url>")
 		}
 
 		return nil
@@ -126,6 +132,11 @@ var configSetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		alias := args[0]
 		url := args[1]
+
+		// 检查是否为内置源
+		if fetcher.IsBuiltinSource(alias) {
+			return fmt.Errorf("cannot override builtin source: %s", alias)
+		}
 
 		// 判断使用 url 还是 url_template
 		urlField := "url"
@@ -166,7 +177,16 @@ var configSetCmd = &cobra.Command{
 			return fmt.Errorf("save config: %w", err)
 		}
 
+		// 显示添加成功信息
 		fmt.Printf("Source %q added to %s\n", alias, configPath)
+		fmt.Println()
+		fmt.Printf("  Alias: %s\n", alias)
+		if src.URL != "" {
+			fmt.Printf("  URL: %s\n", src.URL)
+		} else {
+			fmt.Printf("  URL Template: %s\n", src.URLTemplate)
+		}
+		fmt.Printf("  Format: %s\n", src.Format)
 		return nil
 	},
 }
@@ -178,6 +198,11 @@ var configUnsetCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		alias := args[0]
+
+		// 检查是否为内置源
+		if fetcher.IsBuiltinSource(alias) {
+			return fmt.Errorf("cannot remove builtin source: %s", alias)
+		}
 
 		// 加载配置
 		configPath := expandPath(configFile)
@@ -222,8 +247,35 @@ var configVerifyCmd = &cobra.Command{
 		}
 
 		fmt.Println("Config file is valid.")
-		fmt.Printf("Sources: %d\n", len(loadedCfg.Sources))
-		fmt.Printf("Credentials: %d\n", len(loadedCfg.Credentials))
+		fmt.Println()
+
+		// 显示内置源
+		fmt.Println("Builtin sources:")
+		fmt.Println("  gh (github) - builtin")
+		fmt.Println("  lp (launchpad) - builtin")
+
+		// 显示自定义源
+		if len(loadedCfg.Sources) > 0 {
+			fmt.Println()
+			fmt.Println("Custom sources:")
+			for name, src := range loadedCfg.Sources {
+				enabled := "enabled"
+				if !src.IsEnabled() {
+					enabled = "disabled"
+				}
+				fmt.Printf("  %s (%s) - %s\n", name, src.Alias, enabled)
+			}
+		}
+
+		// 显示凭证
+		if len(loadedCfg.Credentials) > 0 {
+			fmt.Println()
+			fmt.Println("Credentials:")
+			for name, cred := range loadedCfg.Credentials {
+				fmt.Printf("  %s - %s\n", name, cred.Type)
+			}
+		}
+
 		return nil
 	},
 }

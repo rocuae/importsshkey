@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/importsshkey/importsshkey/internal/domain"
+	"github.com/rocuae/importsshkey/internal/domain"
 )
 
 // Manager authorized_keys 文件管理器

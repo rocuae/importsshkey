@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/importsshkey/importsshkey/internal/domain"
+	"github.com/rocuae/importsshkey/internal/domain"
 )
 
 // LaunchpadFetcher Launchpad 公钥拉取器

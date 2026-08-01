@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/importsshkey/importsshkey/internal/config"
-	"github.com/importsshkey/importsshkey/internal/manager"
+	"github.com/rocuae/importsshkey/internal/config"
+	"github.com/rocuae/importsshkey/internal/manager"
 	"github.com/spf13/cobra"
 )
 
