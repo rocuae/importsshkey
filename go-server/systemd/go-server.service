@@ -1,0 +1,35 @@
+[Unit]
+Description=SSH 密钥管理服务器
+After=network.target
+
+[Service]
+Type=simple
+User=iskey-server
+Group=iskey-server
+WorkingDirectory=/opt/iskey-server
+ExecStart=/opt/iskey-server/iskey-server server -f
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=iskey-server
+
+# 环境变量配置（可根据需要修改）
+Environment=SERVER_HOST=0.0.0.0
+Environment=SERVER_PORT=8080
+Environment=DB_DRIVER=sqlite
+Environment=DB_PATH=/opt/iskey-server/iskey.db
+Environment=ADMIN_TOKEN=your-super-secure-admin-token-here
+Environment=ALLOWED_ORIGINS=*
+Environment=LOG_LEVEL=info
+
+# 安全限制
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/iskey-server
+
+[Install]
+WantedBy=multi-user.target

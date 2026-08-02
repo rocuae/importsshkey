@@ -3,6 +3,9 @@ export interface Env {
   // KV 命名空间绑定，用于存储 SSH 公钥数据
   KV: KVNamespace;
 
+  // 静态资源绑定，用于服务 HTML 等静态文件
+  ASSETS: Fetcher;
+
   // 环境变量（在 wrangler.jsonc 中配置）
   API_VERSION: string;
   ALLOWED_ORIGINS: string;
@@ -11,7 +14,7 @@ export interface Env {
   ADMIN_TOKEN: string;
 
   // 索引签名，满足 Hono 的 Env 泛型约束
-  [key: string]: string | KVNamespace;
+  [key: string]: string | KVNamespace | Fetcher;
 }
 
 /** SSH 公钥的元数据信息 */

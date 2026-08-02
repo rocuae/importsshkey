@@ -5,14 +5,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o iskey-server cmd/server/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o iskey-server .
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
 COPY --from=builder /app/iskey-server .
-COPY --from=builder /app/.env .
+COPY --from=builder /app/config.yaml .
 
 EXPOSE 8080
 ENTRYPOINT ["./iskey-server"]

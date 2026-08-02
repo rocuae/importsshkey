@@ -9,12 +9,12 @@ services:
       - "8080:8080"
     environment:
       - DB_DRIVER=sqlite
-      - DB_DSN=/data/iskey.db
+      - DB_PATH=/data/iskey.db
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
     volumes:
       - ./data:/data
-      - ./.env:/root/.env
+      - ./config.yaml:/root/config.yaml
     logging:
       driver: "json-file"
       options:

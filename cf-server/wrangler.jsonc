@@ -38,6 +38,12 @@
     "ALLOWED_ORIGINS": "*"              // CORS 允许的来源，生产环境建议限制为具体域名
   },
 
+  // 静态资源配置
+  "assets": {
+    "directory": "./static",
+    "binding": "ASSETS"
+  },
+
   // 敏感配置（如 ADMIN_TOKEN）请使用 wrangler secret put 设置：
   //   wrangler secret put ADMIN_TOKEN
   // 代码中通过 env.ADMIN_TOKEN 访问

@@ -9,7 +9,7 @@ build-cli:
 
 # 构建 Go Server
 build-server:
-	cd go-server && go build -o ../bin/iskey-server cmd/server/main.go
+	cd go-server && go build -o ../bin/iskey-server .
 
 # 测试
 test:
@@ -29,6 +29,7 @@ clean:
 	rm -rf bin/
 	rm -f test.db
 	rm -rf go-server/*.db
+	rm -f go-server/config.yaml
 
 # 安装依赖
 deps:
@@ -49,7 +50,7 @@ build-cli-windows:
 
 # 交叉编译 Go Server（Linux amd64）
 build-server-linux:
-	cd go-server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../bin/iskey-server-linux-amd64 cmd/server/main.go
+	cd go-server && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../bin/iskey-server-linux-amd64 .
 
 # 所有平台
 build-all: build-cli-linux build-cli-darwin build-cli-windows build-server-linux
