@@ -121,8 +121,6 @@ func FormatComment(source, user, fingerprint string) string {
 //   - fingerprint: 指纹
 //   - ok: 是否解析成功
 func ParseComment(comment string) (source, user, fingerprint string, ok bool) {
-	// 移除 "# " 前缀（如有）
-	comment = strings.TrimPrefix(comment, "# ")
 	comment = strings.TrimSpace(comment)
 
 	// 解析 iskey:<source>:<user>:<fingerprint>

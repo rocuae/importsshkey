@@ -23,14 +23,12 @@ sources:
   # 修改 URL 指向实际部署地址
   # keys-server:
   #   alias: keys
-  #   url_template: "https://keys.example.com/keys/{{ .User }}"
+  #   url: "https://keys.example.com/keys/{{ .User }}"
   #   format: plaintext
-  #   enabled: true
 
   # 企业内部 GitLab 示例（需要认证）
   # gitlab:
   #   alias: work
-  #   url_template: "https://git.internal.com/users/{{ .User }}/keys"
+  #   url: "https://git.internal.com/users/{{ .User }}/keys"
   #   format: plaintext
   #   auth_ref: my-gitlab-token
-  #   enabled: true

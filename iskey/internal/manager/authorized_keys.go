@@ -82,11 +82,25 @@ func (m *Manager) Load() ([]*domain.KeyEntry, error) {
 
 	var entries []*domain.KeyEntry
 	scanner := bufio.NewScanner(f)
+	var pendingComment string
 	for scanner.Scan() {
-		line := scanner.Text()
-		entry, ok := ParseKeyLine(line)
-		if ok {
-			entries = append(entries, entry)
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "# iskey:") {
+			pendingComment = strings.TrimPrefix(line, "# ")
+			continue
+		}
+		if pendingComment != "" && line != "" {
+			source, user, fingerprint, ok := domain.ParseComment(pendingComment)
+			if ok {
+				entries = append(entries, &domain.KeyEntry{
+					PublicKey:   line,
+					Source:      source,
+					User:        user,
+					Fingerprint: fingerprint,
+					Comment:     pendingComment,
+				})
+			}
+			pendingComment = ""
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -122,35 +136,7 @@ func (m *Manager) LoadAll() ([]string, error) {
 	return lines, nil
 }
 
-// ParseKeyLine 解析 authorized_keys 行，提取 iskey 管理的条目
-// 参数：
-//   - line: authorized_keys 行内容
-//
-// 返回：
-//   - *domain.KeyEntry: 解析出的条目
-//   - bool: 是否为 iskey 管理的条目
-func ParseKeyLine(line string) (*domain.KeyEntry, bool) {
-	// iskey 注释格式: iskey:<source>:<user>:<fingerprint>
-	idx := strings.LastIndex(line, "# iskey:")
-	if idx < 0 {
-		return nil, false
-	}
 
-	comment := strings.TrimSpace(line[idx+2:])
-	source, user, fingerprint, ok := domain.ParseComment(comment)
-	if !ok {
-		return nil, false
-	}
-
-	pubKey := strings.TrimSpace(line[:idx])
-	return &domain.KeyEntry{
-		PublicKey:   pubKey,
-		Source:      source,
-		User:        user,
-		Fingerprint: fingerprint,
-		Comment:     comment,
-	}, true
-}
 
 // Add 添加新条目（若已存在相同指纹，根据 force 决定是否覆盖）
 // 参数：
@@ -276,53 +262,6 @@ func (m *Manager) List(sourceFilter string) ([]*domain.KeyEntry, error) {
 	return filtered, nil
 }
 
-// Sync 全量同步：给定远程列表，计算差集并执行新增/删除
-// 参数：
-//   - remoteEntries: 远程公钥列表
-//   - prune: 是否清理本地孤立条目
-//
-// 返回：
-//   - *SyncResult: 同步结果
-//   - error: 文件读写错误
-func (m *Manager) Sync(remoteEntries []*domain.KeyEntry, prune bool) (*SyncResult, error) {
-	local, err := m.Load()
-	if err != nil {
-		return nil, fmt.Errorf("load local keys: %w", err)
-	}
-
-	result := &SyncResult{}
-
-	// 计算差异
-	toAdd, toRemove, unchanged := Diff(local, remoteEntries)
-
-	// 添加新条目
-	for _, entry := range toAdd {
-		if _, err := m.Add(entry, false); err != nil {
-			result.Errors = append(result.Errors, err)
-			continue
-		}
-		result.Added = append(result.Added, entry.Fingerprint)
-	}
-
-	// 删除远程已移除的条目
-	if prune {
-		for _, entry := range toRemove {
-			if _, err := m.RemoveByTarget("", "", entry.Fingerprint); err != nil {
-				result.Errors = append(result.Errors, err)
-				continue
-			}
-			result.Removed = append(result.Removed, entry.Fingerprint)
-		}
-	}
-
-	// 未变更的条目
-	for _, entry := range unchanged {
-		result.Skipped = append(result.Skipped, entry.Fingerprint)
-	}
-
-	return result, nil
-}
-
 // writeEntries 原子写入条目到文件（先写临时文件，再 rename）
 // 参数：
 //   - entries: 要写入的条目列表
@@ -347,19 +286,25 @@ func (m *Manager) writeEntries(entries []*domain.KeyEntry) error {
 	// 读取非 iskey 管理的行，保留原样
 	allLines, loadErr := m.LoadAll()
 	if loadErr == nil {
+		var skipNext bool
 		for _, line := range allLines {
-			if _, ok := ParseKeyLine(line); !ok {
-				fmt.Fprintln(tmpFile, line)
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "# iskey:") {
+				skipNext = true
+				continue
 			}
+			if skipNext {
+				skipNext = false
+				continue
+			}
+			fmt.Fprintln(tmpFile, line)
 		}
 	}
 
-	// 写入 iskey 管理的条目
+	// 写入 iskey 管理的条目（两行格式：注释行 + 公钥行）
 	for _, e := range entries {
-		line := fmt.Sprintf("%s # %s", e.PublicKey, e.Comment)
-		if _, err := fmt.Fprintln(tmpFile, line); err != nil {
-			return fmt.Errorf("write to temp file: %w", err)
-		}
+		fmt.Fprintln(tmpFile, "# "+e.Comment)
+		fmt.Fprintln(tmpFile, e.PublicKey)
 	}
 
 	if err := tmpFile.Close(); err != nil {
@@ -410,48 +355,4 @@ func copyFile(src, dst string) error {
 	return os.WriteFile(dst, data, 0600)
 }
 
-// Diff 计算本地与远程公钥集合的差异
-// 参数：
-//   - local: 本地条目列表
-//   - remote: 远程条目列表
-//
-// 返回：
-//   - toAdd: 需要新增的条目
-//   - toRemove: 需要删除的条目
-//   - unchanged: 未变更的条目
-func Diff(local, remote []*domain.KeyEntry) (toAdd, toRemove, unchanged []*domain.KeyEntry) {
-	localMap := make(map[string]*domain.KeyEntry)
-	for _, e := range local {
-		localMap[e.Fingerprint] = e
-	}
-	remoteMap := make(map[string]*domain.KeyEntry)
-	for _, e := range remote {
-		remoteMap[e.Fingerprint] = e
-	}
 
-	for fp, entry := range remoteMap {
-		if _, exists := localMap[fp]; !exists {
-			toAdd = append(toAdd, entry)
-		} else {
-			unchanged = append(unchanged, entry)
-		}
-	}
-	for fp, entry := range localMap {
-		if _, exists := remoteMap[fp]; !exists {
-			toRemove = append(toRemove, entry)
-		}
-	}
-	return
-}
-
-// SyncResult 同步操作的结果
-type SyncResult struct {
-	// Added 新增的指纹列表
-	Added []string
-	// Removed 移除的指纹列表
-	Removed []string
-	// Skipped 已存在且未变更的指纹列表
-	Skipped []string
-	// Errors 同步过程中的错误
-	Errors []error
-}

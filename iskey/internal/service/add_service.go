@@ -64,10 +64,6 @@ func (s *AddService) Run(ctx context.Context, sourceAlias, user string, vars map
 		return nil, err
 	}
 
-	if srcCfg.Enabled != nil && !*srcCfg.Enabled {
-		return &AddResult{Status: "skipped", Action: "skipped"}, nil
-	}
-
 	// 创建 Fetcher
 	f, err := fetcher.Factory(srcCfg, nil, user)
 	if err != nil {

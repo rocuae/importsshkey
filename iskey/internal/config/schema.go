@@ -51,38 +51,14 @@ type Credential struct {
 type SourceConfig struct {
 	// Alias 短别名，用于命令行快速引用
 	Alias string `yaml:"alias"`
-	// URL 静态 URL（如果不需要模板变量）
+	// URL 静态 URL 或模板 URL，支持 {{ .VarName }} 语法
 	URL string `yaml:"url"`
-	// URLTemplate 模板 URL，支持 {{ .VarName }} 语法
-	URLTemplate string `yaml:"url_template"`
 	// Format 返回内容解析格式: plaintext 或 github_json，默认: plaintext
 	Format string `yaml:"format"`
 	// AuthRef 引用的凭证名称
 	AuthRef string `yaml:"auth_ref"`
 	// DefaultVars 默认模板变量值
 	DefaultVars map[string]string `yaml:"default_vars"`
-	// Enabled 是否启用该源，默认: true
-	Enabled *bool `yaml:"enabled"`
-}
-
-// IsEnabled 检查源是否启用
-// 返回：
-//   - bool: 是否启用（默认 true）
-func (s *SourceConfig) IsEnabled() bool {
-	if s.Enabled == nil {
-		return true
-	}
-	return *s.Enabled
-}
-
-// GetURL 获取 URL（优先使用静态 URL，其次使用模板 URL）
-// 返回：
-//   - string: URL 字符串
-func (s *SourceConfig) GetURL() string {
-	if s.URL != "" {
-		return s.URL
-	}
-	return s.URLTemplate
 }
 
 // Validate 验证配置是否合法
@@ -91,8 +67,8 @@ func (s *SourceConfig) GetURL() string {
 func (c *Config) Validate() error {
 	// 验证数据源
 	for name, src := range c.Sources {
-		if src.URL == "" && src.URLTemplate == "" {
-			return fmt.Errorf("source %q: url or url_template is required", name)
+		if src.URL == "" {
+			return fmt.Errorf("source %q: url is required", name)
 		}
 		if src.Format != "" && src.Format != "plaintext" && src.Format != "github_json" {
 			return fmt.Errorf("source %q: invalid format %q (must be plaintext or github_json)", name, src.Format)
@@ -201,16 +177,14 @@ func (c *Config) GetSource(alias string) (string, *SourceConfig, bool) {
 	return "", nil, false
 }
 
-// GetEnabledSources 获取所有启用的数据源
+// GetAllSources 获取所有数据源
 // 返回：
 //   - map[string]*SourceConfig: 源名称 -> 源配置
-func (c *Config) GetEnabledSources() map[string]*SourceConfig {
+func (c *Config) GetAllSources() map[string]*SourceConfig {
 	result := make(map[string]*SourceConfig)
 	for name, src := range c.Sources {
-		if src.IsEnabled() {
-			srcCopy := src
-			result[name] = &srcCopy
-		}
+		srcCopy := src
+		result[name] = &srcCopy
 	}
 	return result
 }

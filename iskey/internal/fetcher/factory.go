@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strings"
 	"text/template"
 
 	"github.com/rocuae/importsshkey/internal/config"
@@ -70,17 +71,16 @@ func Factory(source *config.SourceConfig, creds *config.Credential, user string)
 //   - string: 解析后的 URL
 //   - error: 模板解析错误
 func resolveURL(source *config.SourceConfig, user string) (string, error) {
-	// 优先使用静态 URL
-	if source.URL != "" {
-		return source.URL, nil
-	}
-
-	// 使用模板 URL
-	if source.URLTemplate == "" {
+	if source.URL == "" {
 		return "", fmt.Errorf("source URL is empty")
 	}
 
-	tmpl, err := template.New("url").Parse(source.URLTemplate)
+	// 检测是否包含模板变量
+	if !strings.Contains(source.URL, "{{") {
+		return source.URL, nil
+	}
+
+	tmpl, err := template.New("url").Parse(source.URL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL template: %w", err)
 	}
@@ -128,21 +128,18 @@ func ResolveAlias(cfg *config.Config, alias string) (string, *config.SourceConfi
 //   - *SourceConfig: 源配置
 //   - bool: 是否为内置源
 func GetBuiltinSource(alias string) (*config.SourceConfig, bool) {
-	enabled := true
 	switch alias {
 	case "gh", "github":
 		return &config.SourceConfig{
-			Alias:       "gh",
-			URLTemplate: "https://api.github.com/users/{{ .User }}/keys",
-			Format:      "github_json",
-			Enabled:     &enabled,
+			Alias:  "gh",
+			URL:    "https://api.github.com/users/{{ .User }}/keys",
+			Format: "github_json",
 		}, true
 	case "lp", "launchpad":
 		return &config.SourceConfig{
-			Alias:       "lp",
-			URLTemplate: "https://launchpad.net/~{{ .User }}/+sshkeys",
-			Format:      "plaintext",
-			Enabled:     &enabled,
+			Alias:  "lp",
+			URL:    "https://launchpad.net/~{{ .User }}/+sshkeys",
+			Format: "plaintext",
 		}, true
 	}
 	return nil, false

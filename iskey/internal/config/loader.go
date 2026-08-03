@@ -143,10 +143,6 @@ func setDefaults(cfg *Config) {
 		if src.Format == "" {
 			src.Format = "plaintext"
 		}
-		if src.Enabled == nil {
-			enabled := true
-			src.Enabled = &enabled
-		}
 		// 如果没有别名，使用名称作为别名
 		if src.Alias == "" {
 			src.Alias = name

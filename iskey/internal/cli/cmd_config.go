@@ -83,16 +83,8 @@ var configListCmd = &cobra.Command{
 		if len(cfg.Sources) > 0 {
 			fmt.Println("Custom sources:")
 			for name, src := range cfg.Sources {
-				enabled := "enabled"
-				if !src.IsEnabled() {
-					enabled = "disabled"
-				}
-				fmt.Printf("  %s (%s) - %s\n", name, src.Alias, enabled)
-				if src.URL != "" {
-					fmt.Printf("    URL: %s\n", src.URL)
-				} else if src.URLTemplate != "" {
-					fmt.Printf("    URL Template: %s\n", src.URLTemplate)
-				}
+				fmt.Printf("  %s (%s)\n", name, src.Alias)
+				fmt.Printf("    URL: %s\n", src.URL)
 				fmt.Printf("    Format: %s\n", src.Format)
 			}
 		} else {
@@ -108,19 +100,16 @@ var configListCmd = &cobra.Command{
 
 // getBuiltinSources 获取内置源配置
 func getBuiltinSources() map[string]config.SourceConfig {
-	enabled := true
 	return map[string]config.SourceConfig{
 		"github": {
-			Alias:       "gh",
-			URLTemplate: "https://api.github.com/users/{{ .User }}/keys",
-			Format:      "github_json",
-			Enabled:     &enabled,
+			Alias:  "gh",
+			URL:    "https://api.github.com/users/{{ .User }}/keys",
+			Format: "github_json",
 		},
 		"launchpad": {
-			Alias:       "lp",
-			URLTemplate: "https://launchpad.net/~{{ .User }}/+sshkeys",
-			Format:      "plaintext",
-			Enabled:     &enabled,
+			Alias:  "lp",
+			URL:    "https://launchpad.net/~{{ .User }}/+sshkeys",
+			Format: "plaintext",
 		},
 	}
 }
@@ -147,9 +136,9 @@ var configSetCmd = &cobra.Command{
 
 		// 创建源配置
 		src := config.SourceConfig{
-			Alias:       alias,
-			URLTemplate: url,
-			Format:      "plaintext",
+			Alias:  alias,
+			URL:    url,
+			Format: "plaintext",
 		}
 
 		// 加载现有配置
@@ -177,11 +166,7 @@ var configSetCmd = &cobra.Command{
 		fmt.Printf("Source %q added to %s\n", alias, configPath)
 		fmt.Println()
 		fmt.Printf("  Alias: %s\n", alias)
-		if src.URL != "" {
-			fmt.Printf("  URL: %s\n", src.URL)
-		} else {
-			fmt.Printf("  URL Template: %s\n", src.URLTemplate)
-		}
+		fmt.Printf("  URL: %s\n", src.URL)
 		fmt.Printf("  Format: %s\n", src.Format)
 		return nil
 	},
@@ -255,11 +240,7 @@ var configVerifyCmd = &cobra.Command{
 			fmt.Println()
 			fmt.Println("Custom sources:")
 			for name, src := range loadedCfg.Sources {
-				enabled := "enabled"
-				if !src.IsEnabled() {
-					enabled = "disabled"
-				}
-				fmt.Printf("  %s (%s) - %s\n", name, src.Alias, enabled)
+				fmt.Printf("  %s (%s)\n", name, src.Alias)
 			}
 		}
 

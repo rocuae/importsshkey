@@ -48,7 +48,6 @@ var rootCmd = &cobra.Command{
   iskey add gh:octocat
   iskey add work:zhangsan
   iskey remove gh:octocat
-  iskey sync --source work
   iskey list --show-fingerprint`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -101,7 +100,6 @@ func init() {
 
 	rootCmd.AddCommand(addCmd)
 	rootCmd.AddCommand(removeCmd)
-	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(versionCmd)
@@ -178,21 +176,6 @@ func printTextResult(result interface{}) {
 			fmt.Printf("Key:      %s\n", r.Fingerprint)
 		}
 		fmt.Printf("Removed:  %d key(s)\n", r.Removed)
-	case *manager.SyncResult:
-		if len(r.Added) > 0 {
-			fmt.Printf("Added: %d\n", len(r.Added))
-		}
-		if len(r.Removed) > 0 {
-			fmt.Printf("Removed: %d\n", len(r.Removed))
-		}
-		if len(r.Skipped) > 0 {
-			fmt.Printf("Skipped: %d\n", len(r.Skipped))
-		}
-		if len(r.Errors) > 0 {
-			for _, err := range r.Errors {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			}
-		}
 	default:
 		fmt.Printf("%+v\n", result)
 	}
