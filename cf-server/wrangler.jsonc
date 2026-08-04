@@ -19,7 +19,7 @@
   // 可观测性配置
   // 启用后可在 Cloudflare Dashboard 查看 Worker 的日志和指标
   "observability": {
-    "enabled": true
+    "enabled": false
   },
   // KV 命名空间绑定
   // KV 名称: iskey
