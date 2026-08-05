@@ -1,0 +1,28 @@
+# 服务配置
+server:
+  host: 0.0.0.0
+  port: 8080
+
+# 数据库配置
+database:
+  driver: sqlite
+  # SQLite 配置
+  path: ./iskey.db
+  # PostgreSQL 配置（取消注释并修改）
+  # driver: postgres
+  # host: localhost
+  # port: 5432
+  # user: postgres
+  # password: ""
+  # dbname: iskey
+  # sslmode: disable
+
+# 安全配置
+security:
+  # 管理员 Token（为空时禁止写操作）
+  admin_token: ""
+  allowed_origins: "*"
+
+# 日志配置
+log:
+  level: info

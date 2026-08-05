@@ -29,9 +29,6 @@ bin/
 *.db-journal
 *.db-wal
 
-# Config files
-config.yaml
-
 # Test files
 test.db
 
