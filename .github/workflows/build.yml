@@ -27,7 +27,7 @@ jobs:
         run: |
           cd iskey
           CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} \
-            go build -trimpath -ldflags="-s -w" -o ../bin/iskey-linux-${{ matrix.arch }} ./cmd/iskey
+            go build -trimpath -ldflags="-s -w" -o ../bin/iskey-cli-linux-${{ matrix.arch }} ./cmd/iskey
 
       - name: Build go-server
         run: |

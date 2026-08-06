@@ -2,12 +2,11 @@ name: Publish go-server Docker image
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: importsshkey-server
+  IMAGE_NAME: iskey-server
 
 concurrency:
   group: docker-${{ github.ref }}
@@ -15,7 +14,7 @@ concurrency:
 
 jobs:
   docker:
-    name: Build & push multi-arch image
+    name: Build Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -50,11 +49,9 @@ jobs:
             docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=tag,pattern=v(.*),suffix=-latest
             type=ref,event=tag,pattern=v(.*)
-            type=sha,prefix={{sha}},format=short
 
-      - name: Build and push
+      - name: Build and Push Image
         uses: docker/build-push-action@v7
         continue-on-error: true
         with:
