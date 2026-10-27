@@ -36,12 +36,14 @@ var configShowCmd = &cobra.Command{
 	},
 }
 
+// init 注册 config 子命令及其子命令。
 func init() {
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configShowCmd)
 	configCmd.PersistentFlags().StringVarP(&configConfigFile, "config", "c", "", "指定配置文件路径（默认为 config.yaml）")
 }
 
+// generateConfig 生成默认配置；已存在时拒绝覆盖。
 func generateConfig(configFile string) {
 	if configFile == "" {
 		configFile = "config.yaml"
@@ -52,7 +54,7 @@ func generateConfig(configFile string) {
 		fmt.Printf("配置文件 %s 已存在。\n", configFile)
 		fmt.Print("是否覆盖？(y/N): ")
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if strings.ToLower(response) != "y" {
 			fmt.Println("操作已取消。")
 			return
@@ -102,9 +104,14 @@ log:
 	fmt.Println("请根据实际情况修改配置，特别是 security.admin_token。")
 }
 
+// showConfig 打印当前配置并对 Token 做脱敏。
 func showConfig(configFile string) {
 	// 使用 internal/config 包加载配置
-	cfg := config.Load(configFile)
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		fmt.Printf("无法加载配置: %v\n", err)
+		os.Exit(1)
+	}
 
 	// 显示配置
 	fmt.Println("当前配置:")
@@ -136,6 +143,7 @@ func showConfig(configFile string) {
 	}
 }
 
+// maskToken 仅保留 Token 首尾少量字符，避免日志泄露。
 func maskToken(token string) string {
 	if token == "" {
 		return "(未设置)"

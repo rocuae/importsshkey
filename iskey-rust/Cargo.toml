@@ -1,0 +1,33 @@
+[package]
+name = "iskey-rust"
+version = "0.1.0"
+edition = "2024"
+description = "SSH 公钥聚合管理工具"
+license = "MIT"
+
+[[bin]]
+name = "iskey"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+ssh-key = "0.6"
+tempfile = "3"
+ureq = "3"
+rustls = "0.23"
+rustls-pki-types = "1"
+fs2 = "0.4"
+
+[dev-dependencies]
+tiny_http = "0.12"
+
+[profile.release]
+strip = true
+lto = true

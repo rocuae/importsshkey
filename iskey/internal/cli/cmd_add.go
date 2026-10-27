@@ -1,3 +1,4 @@
+// 本文件实现 add 子命令：解析目标与模板变量，并调用服务层导入公钥。
 package cli
 
 import (
@@ -14,6 +15,10 @@ var (
 	addVars []string
 	// addForce 强制覆盖
 	addForce bool
+	// addUser URL 目标使用的用户名
+	addUser string
+	// addFormat 覆盖源的解析格式
+	addFormat string
 )
 
 // addCmd 添加公钥命令
@@ -22,87 +27,84 @@ var addCmd = &cobra.Command{
 	Short: "添加用户的 SSH 公钥",
 	Long: `添加指定用户的 SSH 公钥到 authorized_keys。
 
-TARGET 格式: [SOURCE_ALIAS|URL][:USERNAME]
+TARGET 格式:
+  SOURCE_ALIAS:USERNAME
+  https://example.com/keys.pub  （需配合 --user）
+
 示例:
   iskey add gh:octocat
   iskey add work:zhangsan
-  iskey add https://example.com/keys.pub`,
+  iskey add --user octocat https://example.com/keys.pub`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// 解析 TARGET 参数
-		source, user, err := parseTarget(args[0])
+		source, user, err := parseTarget(args[0], addUser)
 		if err != nil {
 			return err
 		}
 
-		// 解析模板变量
-		vars := parseVars(addVars)
+		vars, err := parseVars(addVars)
+		if err != nil {
+			return err
+		}
 
-		// 创建服务
 		svc := service.NewAddService(cfg, mgr)
-
-		// 执行添加
-		ctx := context.Background()
-		result, err := svc.Run(ctx, source, user, vars, addForce)
+		result, err := svc.Run(context.Background(), service.AddOptions{
+			Source: source,
+			User:   user,
+			Vars:   vars,
+			Format: addFormat,
+			Force:  addForce,
+			DryRun: dryRun,
+		})
 		if err != nil {
 			return fmt.Errorf("add failed: %w", err)
 		}
 
-		// 输出结果
-		if dryRun {
-			fmt.Printf("[dry-run] Would add key for %s:%s\n", source, user)
-			return nil
-		}
-
 		printResult(result)
-		printOutputFile(mgr)
 		return nil
 	},
 }
 
+// init 注册 add 子命令的参数。
 func init() {
-	addCmd.Flags().StringArrayVar(&addVars, "var", nil, "模板变量，格式 Key=Value")
-	addCmd.Flags().BoolVar(&addForce, "force", false, "强制覆盖已存在的公钥")
+	addCmd.Flags().StringArrayVar(&addVars, "var", nil, "模板变量，格式 Key=Value（可重复）")
+	addCmd.Flags().BoolVar(&addForce, "force", false, "用本次拉取结果替换同一 source:user 的已有公钥")
+	addCmd.Flags().StringVar(&addUser, "user", "", "URL 目标对应的用户名")
+	addCmd.Flags().StringVar(&addFormat, "format", "", "覆盖解析格式: plaintext/github_json/auto")
 }
 
-// parseTarget 解析 TARGET 参数
-// 参数：
-//   - target: TARGET 字符串，格式为 [SOURCE_ALIAS|URL][:USERNAME]
-//
-// 返回：
-//   - string: 数据源别名或 URL
-//   - string: 用户名
-//   - error: 解析错误
-func parseTarget(target string) (string, string, error) {
-	// 处理 URL 格式（以 http:// 或 https:// 开头）
+// parseTarget 解析 TARGET 参数。
+// URL 目标返回 (url, --user)，由服务层校验用户名是否提供。
+func parseTarget(target, urlUser string) (string, string, error) {
+	target = strings.TrimSpace(target)
 	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
-		// URL 格式：从 URL 推断用户名
-		// 这里需要用户提供用户名，或者从 URL 中提取
-		return target, "", fmt.Errorf("URL format requires explicit username: %s", target)
+		return target, urlUser, nil
 	}
 
-	// 处理 SOURCE:USER 格式
 	parts := strings.SplitN(target, ":", 2)
-	if len(parts) != 2 || parts[1] == "" {
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("invalid TARGET format: %s (expected SOURCE:USER)", target)
 	}
-
 	return parts[0], parts[1], nil
 }
 
-// parseVars 解析模板变量
-// 参数：
-//   - vars: 变量列表，格式为 ["Key=Value", ...]
-//
-// 返回：
-//   - map[string]string: 变量映射
-func parseVars(vars []string) map[string]string {
-	result := make(map[string]string)
-	for _, v := range vars {
-		parts := strings.SplitN(v, "=", 2)
-		if len(parts) == 2 {
-			result[parts[0]] = parts[1]
+// parseVars 解析模板变量，格式错误时明确报错而不是静默忽略。
+func parseVars(vars []string) (map[string]string, error) {
+	result := make(map[string]string, len(vars))
+	for _, item := range vars {
+		parts := strings.SplitN(item, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid --var %q (expected Key=Value)", item)
 		}
+		key := strings.TrimSpace(parts[0])
+		if key == "" {
+			return nil, fmt.Errorf("invalid --var %q: key is empty", item)
+		}
+		switch key {
+		case "User", "Source":
+			return nil, fmt.Errorf("--var %s is reserved", key)
+		}
+		result[key] = parts[1]
 	}
-	return result
+	return result, nil
 }

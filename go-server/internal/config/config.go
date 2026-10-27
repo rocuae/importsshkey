@@ -39,27 +39,40 @@ type Config struct {
 	LogLevel string
 }
 
-// YAMLConfig YAML 配置文件结构
+// YAMLConfig 对应 config.yaml 的嵌套结构；零值字段不会覆盖内置默认值。
 type YAMLConfig struct {
 	Server struct {
+		// Host 监听地址
 		Host string `yaml:"host"`
-		Port int    `yaml:"port"`
+		// Port 监听端口
+		Port int `yaml:"port"`
 	} `yaml:"server"`
 	Database struct {
-		Driver   string `yaml:"driver"`
-		Path     string `yaml:"path"`
-		Host     string `yaml:"host"`
-		Port     int    `yaml:"port"`
-		User     string `yaml:"user"`
+		// Driver 数据库类型：sqlite/postgres
+		Driver string `yaml:"driver"`
+		// Path SQLite 文件路径
+		Path string `yaml:"path"`
+		// Host PostgreSQL 主机
+		Host string `yaml:"host"`
+		// Port PostgreSQL 端口
+		Port int `yaml:"port"`
+		// User PostgreSQL 用户
+		User string `yaml:"user"`
+		// Password PostgreSQL 密码
 		Password string `yaml:"password"`
-		DBName   string `yaml:"dbname"`
-		SSLMode  string `yaml:"sslmode"`
+		// DBName PostgreSQL 数据库名
+		DBName string `yaml:"dbname"`
+		// SSLMode PostgreSQL SSL 模式
+		SSLMode string `yaml:"sslmode"`
 	} `yaml:"database"`
 	Security struct {
-		AdminToken     string `yaml:"admin_token"`
+		// AdminToken 写接口 Bearer Token
+		AdminToken string `yaml:"admin_token"`
+		// AllowedOrigins CORS 白名单，逗号分隔或 *
 		AllowedOrigins string `yaml:"allowed_origins"`
 	} `yaml:"security"`
 	Log struct {
+		// Level 日志级别
 		Level string `yaml:"level"`
 	} `yaml:"log"`
 }
@@ -67,9 +80,11 @@ type YAMLConfig struct {
 // Load 从 config.yaml 和环境变量加载配置
 // 参数：
 //   - configFile: 配置文件路径，为空时使用默认的 config.yaml
+//
 // 返回：
 //   - *Config: 配置对象
-func Load(configFile string) *Config {
+//   - error: 配置文件读取或解析错误
+func Load(configFile string) (*Config, error) {
 	// 默认值
 	cfg := &Config{
 		ServerHost:     "0.0.0.0",
@@ -95,7 +110,10 @@ func Load(configFile string) *Config {
 	// 尝试从配置文件加载
 	if data, err := os.ReadFile(configFile); err == nil {
 		var yamlCfg YAMLConfig
-		if err := yaml.Unmarshal(data, &yamlCfg); err == nil {
+		if unmarshalErr := yaml.Unmarshal(data, &yamlCfg); unmarshalErr != nil {
+			return nil, fmt.Errorf("parse config file %s: %w", configFile, unmarshalErr)
+		}
+		{
 			if yamlCfg.Server.Host != "" {
 				cfg.ServerHost = yamlCfg.Server.Host
 			}
@@ -136,6 +154,8 @@ func Load(configFile string) *Config {
 				cfg.LogLevel = yamlCfg.Log.Level
 			}
 		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read config file %s: %w", configFile, err)
 	}
 
 	// 环境变量覆盖
@@ -183,7 +203,15 @@ func Load(configFile string) *Config {
 		cfg.LogLevel = value
 	}
 
-	return cfg
+	if cfg.ServerPort < 1 || cfg.ServerPort > 65535 {
+		return nil, fmt.Errorf("invalid server port: %d", cfg.ServerPort)
+	}
+	switch cfg.DBDriver {
+	case "sqlite", "postgres", "postgresql":
+	default:
+		return nil, fmt.Errorf("unsupported database driver: %s", cfg.DBDriver)
+	}
+	return cfg, nil
 }
 
 // DSN 根据驱动类型构建数据库连接字符串
@@ -198,5 +226,3 @@ func (c *Config) DSN() string {
 		return c.DBPath
 	}
 }
-
-

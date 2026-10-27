@@ -52,25 +52,28 @@ var rootCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// 跳过 config 子命令的初始化
-		if cmd.Name() == "config" && len(args) > 0 && args[0] == "verify" {
+		// config 子命令自行加载配置：verify/init 需要在配置损坏时仍能运行。
+		if cmd.Parent() != nil && cmd.Parent().Name() == "config" {
+			return nil
+		}
+		if cmd.Name() == "version" {
 			return nil
 		}
 
-		// 解析路径中的 ~
 		configPath := expandPath(configFile)
-		outputPath := expandPath(outputFile)
-
-		// 初始化管理器
-		mgr = manager.NewManager(outputPath)
-
-		// 加载配置
 		loader := config.NewLoader(configPath)
 		var err error
 		cfg, err = loader.LoadOrDefault()
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
+
+		// --output 显式传入时优先；否则使用配置中的 defaults.output。
+		outputPath := outputFile
+		if !cmd.Root().PersistentFlags().Changed("output") && cfg.Defaults.Output != "" {
+			outputPath = cfg.Defaults.Output
+		}
+		mgr = manager.NewManager(expandPath(outputPath))
 
 		// 检查权限（非静默模式下输出警告）
 		if !quiet {
@@ -84,6 +87,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// init 注册全局参数与所有子命令。
 func init() {
 	// 获取默认配置路径
 	defaultConfig := config.DefaultConfigPath()
@@ -147,9 +151,12 @@ func printResult(result interface{}) {
 			os.Exit(1)
 		}
 		fmt.Println(string(data))
-	} else {
-		printTextResult(result)
+		return
 	}
+	if quiet {
+		return
+	}
+	printTextResult(result)
 }
 
 // printTextResult 输出文本格式结果
@@ -162,7 +169,9 @@ func printTextResult(result interface{}) {
 		fmt.Printf("Action:   %s\n", r.Action)
 		fmt.Printf("User:     %s\n", r.User)
 		fmt.Printf("Source:   %s\n", r.Source)
-		fmt.Printf("Key:      %s\n", r.Fingerprint)
+		fmt.Printf("Imported: %d key(s)\n", r.Imported)
+		fmt.Printf("Skipped:  %d key(s)\n", r.Skipped)
+		printKeyResults(r.Keys)
 	case *service.RemoveResult:
 		fmt.Printf("Status:   %s\n", r.Status)
 		fmt.Printf("Action:   %s\n", r.Action)
@@ -176,27 +185,24 @@ func printTextResult(result interface{}) {
 			fmt.Printf("Key:      %s\n", r.Fingerprint)
 		}
 		fmt.Printf("Removed:  %d key(s)\n", r.Removed)
+		printKeyResults(r.Keys)
 	default:
 		fmt.Printf("%+v\n", result)
 	}
 }
 
-// printOutputFile 输出 authorized_keys 文件最终内容
-// 参数：
-//   - mgr: authorized_keys 管理器
-func printOutputFile(mgr *manager.Manager) {
-	lines, err := mgr.LoadAll()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading output file: %v\n", err)
+// printKeyResults 以缩进列表输出每把公钥的变更结果与最终行号。
+// printKeyResults 以缩进列表打印每把公钥的动作与行号。
+func printKeyResults(keys []service.KeyResult) {
+	if len(keys) == 0 {
 		return
 	}
-
-	fmt.Printf("\n%s:\n", outputFile)
-	if len(lines) == 0 {
-		fmt.Println("(empty)")
-		return
-	}
-	for _, line := range lines {
-		fmt.Println(line)
+	fmt.Println("Keys:")
+	for _, key := range keys {
+		if key.Line > 0 {
+			fmt.Printf("  %s  %s  line %d\n", key.Fingerprint, key.Action, key.Line)
+		} else {
+			fmt.Printf("  %s  %s\n", key.Fingerprint, key.Action)
+		}
 	}
 }

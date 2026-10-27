@@ -27,8 +27,16 @@
   "kv_namespaces": [
     {
       "binding": "KV",         // 代码中通过 env.KV 访问
-      "id": "582acbc86c0644d69ec0500e47b872dd",     // 生产环境KV ID: iskey
-      "preview_id": "your-preview-kv-namespace-id"  // 本地开发预览 ID
+      "id": "582acbc86c0644d69ec0500e47b872dd"     // 生产环境 KV ID；未设置 preview_id 时本地 dev 使用模拟 KV
+    }
+  ],
+
+  // 写接口鉴权失败限流：同一 IP 每分钟最多 10 次失败（Workers 原生绑定，跨 isolate 生效）
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
     }
   ],
 

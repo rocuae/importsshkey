@@ -1,78 +1,136 @@
 package repository
 
 import (
-	"errors"
-
 	"gorm.io/gorm"
+
 	"github.com/rocuae/importsshkey/go-server/internal/model"
 )
 
-// GormUserRepository 基于 GORM 的用户仓储实现
-type GormUserRepository struct {
+// GormUserKeyRepository 基于 GORM 的公钥仓储实现
+type GormUserKeyRepository struct {
 	db *gorm.DB
 }
 
-// NewGormUserRepository 创建 GORM 用户仓储
-// 参数：
-//   - db: GORM 数据库实例
-// 返回：
-//   - *GormUserRepository: 仓储实例
-func NewGormUserRepository(db *gorm.DB) *GormUserRepository {
-	return &GormUserRepository{db: db}
+// NewGormUserKeyRepository 创建 GORM 公钥仓储
+func NewGormUserKeyRepository(db *gorm.DB) *GormUserKeyRepository {
+	return &GormUserKeyRepository{db: db}
 }
 
-// CreateOrUpdate 创建或更新用户公钥
-// 参数：
-//   - user: 用户实体
-// 返回：
-//   - error: 数据库错误
-func (r *GormUserRepository) CreateOrUpdate(user *model.User) error {
-	return r.db.Save(user).Error
+// ListByUsername 查询用户的全部公钥
+func (r *GormUserKeyRepository) ListByUsername(username string) ([]*model.UserKey, error) {
+	var keys []*model.UserKey
+	err := r.db.Where("username = ?", username).
+		Order("created_at ASC, id ASC").
+		Find(&keys).Error
+	return keys, err
 }
 
-// GetByUsername 根据用户名查询用户
-// 参数：
-//   - username: 用户名
-// 返回：
-//   - *model.User: 用户实体（不存在返回 nil）
-//   - error: 数据库错误
-func (r *GormUserRepository) GetByUsername(username string) (*model.User, error) {
-	var user model.User
-	err := r.db.Where("username = ?", username).First(&user).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+// Add 添加单把公钥；同一用户下指纹重复时更新来源
+func (r *GormUserKeyRepository) Add(key *model.UserKey) error {
+	return addWithDB(r.db, key)
+}
+
+// AddMany 批量添加公钥（单事务）
+func (r *GormUserKeyRepository) AddMany(keys []*model.UserKey) error {
+	if len(keys) == 0 {
+		return nil
 	}
-	return &user, err
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for _, key := range keys {
+			if err := addWithDB(tx, key); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
-// DeleteByUsername 根据用户名删除用户
-// 参数：
-//   - username: 用户名
-// 返回：
-//   - error: 数据库错误
-func (r *GormUserRepository) DeleteByUsername(username string) error {
-	return r.db.Where("username = ?", username).Delete(&model.User{}).Error
+// addWithDB 在事务内按 (username,fingerprint) 幂等写入，保留已有 CreatedAt。
+func addWithDB(db *gorm.DB, key *model.UserKey) error {
+	var existing model.UserKey
+	result := db.Where("username = ? AND fingerprint = ?", key.Username, key.Fingerprint).
+		Limit(1).Find(&existing)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return db.Create(key).Error
+	}
+	existing.PublicKey = key.PublicKey
+	existing.Source = key.Source
+	return db.Save(&existing).Error
 }
 
-// ListAll 查询所有用户
-// 返回：
-//   - []*model.User: 用户列表
-//   - error: 数据库错误
-func (r *GormUserRepository) ListAll() ([]*model.User, error) {
-	var users []*model.User
-	err := r.db.Order("username ASC").Find(&users).Error
-	return users, err
+// Replace 全量替换用户的所有公钥（单事务）
+func (r *GormUserKeyRepository) Replace(username string, keys []*model.UserKey) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("username = ?", username).Delete(&model.UserKey{}).Error; err != nil {
+			return err
+		}
+		if len(keys) == 0 {
+			return nil
+		}
+		for _, key := range keys {
+			key.Username = username
+		}
+		return tx.CreateInBatches(keys, 100).Error
+	})
+}
+
+// DeleteByUsername 删除用户的全部公钥
+func (r *GormUserKeyRepository) DeleteByUsername(username string) (int64, error) {
+	result := r.db.Where("username = ?", username).Delete(&model.UserKey{})
+	return result.RowsAffected, result.Error
+}
+
+// DeleteByFingerprint 删除用户指定指纹的公钥
+func (r *GormUserKeyRepository) DeleteByFingerprint(username, fingerprint string) (int64, error) {
+	result := r.db.Where("username = ? AND fingerprint = ?", username, fingerprint).
+		Delete(&model.UserKey{})
+	return result.RowsAffected, result.Error
+}
+
+// ListUsers 分页列出用户名，支持模糊搜索
+func (r *GormUserKeyRepository) ListUsers(query string, offset, limit int) ([]string, int64, error) {
+	base := r.db.Model(&model.UserKey{})
+	if query != "" {
+		base = base.Where("username LIKE ?", "%"+query+"%")
+	}
+
+	var total int64
+	if err := base.Distinct("username").Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var users []string
+	if err := base.Distinct("username").
+		Order("username ASC").
+		Offset(offset).
+		Limit(limit).
+		Pluck("username", &users).Error; err != nil {
+		return nil, 0, err
+	}
+	return users, total, nil
+}
+
+// CountUsers 统计不同用户数
+func (r *GormUserKeyRepository) CountUsers() (int64, error) {
+	var count int64
+	err := r.db.Model(&model.UserKey{}).Distinct("username").Count(&count).Error
+	return count, err
+}
+
+// CountKeys 统计公钥总数
+func (r *GormUserKeyRepository) CountKeys() (int64, error) {
+	var count int64
+	err := r.db.Model(&model.UserKey{}).Count(&count).Error
+	return count, err
 }
 
 // Exists 检查用户是否存在
-// 参数：
-//   - username: 用户名
-// 返回：
-//   - bool: 是否存在
-//   - error: 数据库错误
-func (r *GormUserRepository) Exists(username string) (bool, error) {
+func (r *GormUserKeyRepository) Exists(username string) (bool, error) {
 	var count int64
-	err := r.db.Model(&model.User{}).Where("username = ?", username).Count(&count).Error
+	err := r.db.Model(&model.UserKey{}).Where("username = ?", username).Count(&count).Error
 	return count > 0, err
 }
 
@@ -82,35 +140,28 @@ type GormAuditLogRepository struct {
 }
 
 // NewGormAuditLogRepository 创建 GORM 审计日志仓储
-// 参数：
-//   - db: GORM 数据库实例
-// 返回：
-//   - *GormAuditLogRepository: 仓储实例
 func NewGormAuditLogRepository(db *gorm.DB) *GormAuditLogRepository {
 	return &GormAuditLogRepository{db: db}
 }
 
 // Create 创建审计日志
-// 参数：
-//   - log: 审计日志实体
-// 返回：
-//   - error: 数据库错误
 func (r *GormAuditLogRepository) Create(log *model.AuditLog) error {
 	return r.db.Create(log).Error
 }
 
 // ListByUsername 查询指定用户的审计日志
-// 参数：
-//   - username: 用户名
-//   - limit: 返回数量限制
-// 返回：
-//   - []*model.AuditLog: 日志列表
-//   - error: 数据库错误
 func (r *GormAuditLogRepository) ListByUsername(username string, limit int) ([]*model.AuditLog, error) {
 	var logs []*model.AuditLog
 	err := r.db.Where("username = ?", username).
-		Order("created_at DESC").
+		Order("created_at DESC, id DESC").
 		Limit(limit).
 		Find(&logs).Error
+	return logs, err
+}
+
+// ListRecent 查询最近的审计日志
+func (r *GormAuditLogRepository) ListRecent(limit int) ([]*model.AuditLog, error) {
+	var logs []*model.AuditLog
+	err := r.db.Order("created_at DESC, id DESC").Limit(limit).Find(&logs).Error
 	return logs, err
 }

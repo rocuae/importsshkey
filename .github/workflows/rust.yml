@@ -1,0 +1,68 @@
+name: Build iskey-rust binaries
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build iskey-rust (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            target: x86_64-unknown-linux-gnu
+          - arch: arm64
+            target: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Test
+        run: |
+          cd iskey-rust
+          cargo test
+
+      - name: Build for ${{ matrix.arch }}
+        run: |
+          cd iskey-rust
+          cargo build --release --target ${{ matrix.target }}
+          mkdir -p ../bin
+          cp target/${{ matrix.target }}/release/iskey ../bin/iskey-rust-linux-${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: iskey-rust-linux-${{ matrix.arch }}
+          path: bin/iskey-rust-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  release:
+    name: Publish to GitHub Releases
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: bin
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: bin/iskey-rust-*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/rocuae/importsshkey/internal/domain"
 )
 
 // Config 全局配置
@@ -65,17 +67,109 @@ type SourceConfig struct {
 // 返回：
 //   - error: 验证错误
 func (c *Config) Validate() error {
-	// 验证数据源
+	if c.Defaults.Timeout < 0 {
+		return fmt.Errorf("defaults.timeout must not be negative")
+	}
+	if c.Defaults.MaxRetries < 0 {
+		return fmt.Errorf("defaults.max_retries must not be negative")
+	}
+
+	for name, cred := range c.Credentials {
+		switch cred.Type {
+		case "bearer":
+			if cred.ValueFromEnv == "" {
+				return fmt.Errorf("credential %q: value_from_env is required for bearer type", name)
+			}
+		case "basic":
+			if cred.UsernameFromEnv == "" || cred.PasswordFromEnv == "" {
+				return fmt.Errorf("credential %q: username_from_env and password_from_env are required for basic type", name)
+			}
+		case "none", "":
+		default:
+			return fmt.Errorf("credential %q: unsupported type %q (must be bearer, basic, or none)", name, cred.Type)
+		}
+	}
+
+	aliases := make(map[string]string)
 	for name, src := range c.Sources {
+		if err := domain.ValidateSource(name); err != nil {
+			return fmt.Errorf("source %q: %w", name, err)
+		}
 		if src.URL == "" {
 			return fmt.Errorf("source %q: url is required", name)
 		}
-		if src.Format != "" && src.Format != "plaintext" && src.Format != "github_json" {
-			return fmt.Errorf("source %q: invalid format %q (must be plaintext or github_json)", name, src.Format)
+		switch src.Format {
+		case "", "plaintext", "github_json", "auto":
+		default:
+			return fmt.Errorf("source %q: invalid format %q (must be plaintext, github_json, or auto)", name, src.Format)
+		}
+		if src.AuthRef != "" {
+			if _, ok := c.Credentials[src.AuthRef]; !ok {
+				return fmt.Errorf("source %q: auth_ref %q does not exist", name, src.AuthRef)
+			}
+		}
+		if src.Alias != "" {
+			if err := domain.ValidateSource(src.Alias); err != nil {
+				return fmt.Errorf("source %q: invalid alias %q: %w", name, src.Alias, err)
+			}
+			if _, isSourceName := c.Sources[src.Alias]; isSourceName && src.Alias != name {
+				return fmt.Errorf("source %q: alias %q conflicts with another source name", name, src.Alias)
+			}
+			if other, exists := aliases[src.Alias]; exists && other != name {
+				return fmt.Errorf("source %q: alias %q is already used by %q", name, src.Alias, other)
+			}
+			aliases[src.Alias] = name
 		}
 	}
 
 	return nil
+}
+
+// ResolveCredential 解析指定凭证的环境变量值。
+// 只有实际被某个源引用的凭据才会触发环境变量检查。
+func (c *Config) ResolveCredential(name string) (*Credential, error) {
+	if name == "" {
+		return nil, nil
+	}
+	cred, ok := c.Credentials[name]
+	if !ok {
+		return nil, fmt.Errorf("credential %q does not exist", name)
+	}
+
+	switch cred.Type {
+	case "bearer":
+		if cred.ValueFromEnv == "" {
+			return nil, fmt.Errorf("credential %q: value_from_env is required for bearer type", name)
+		}
+		value := os.Getenv(cred.ValueFromEnv)
+		if value == "" {
+			return nil, fmt.Errorf("credential %q: environment variable %s is not set", name, cred.ValueFromEnv)
+		}
+		cred.ResolvedValue = value
+
+	case "basic":
+		if cred.UsernameFromEnv == "" || cred.PasswordFromEnv == "" {
+			return nil, fmt.Errorf("credential %q: username_from_env and password_from_env are required for basic type", name)
+		}
+		username := os.Getenv(cred.UsernameFromEnv)
+		if username == "" {
+			return nil, fmt.Errorf("credential %q: environment variable %s is not set", name, cred.UsernameFromEnv)
+		}
+		password := os.Getenv(cred.PasswordFromEnv)
+		if password == "" {
+			return nil, fmt.Errorf("credential %q: environment variable %s is not set", name, cred.PasswordFromEnv)
+		}
+		cred.ResolvedUsername = username
+		cred.ResolvedPassword = password
+
+	case "none", "":
+		// 无需认证
+
+	default:
+		return nil, fmt.Errorf("credential %q: unsupported type %q (must be bearer, basic, or none)", name, cred.Type)
+	}
+
+	return &cred, nil
 }
 
 // ResolveCredentials 解析所有凭证的环境变量值

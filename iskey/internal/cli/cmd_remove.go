@@ -1,7 +1,9 @@
+// 本文件实现 remove 子命令：支持按 TARGET、指纹或整源删除，并透传 dry-run。
 package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/rocuae/importsshkey/internal/service"
 	"github.com/spf13/cobra"
@@ -16,77 +18,58 @@ var (
 
 // removeCmd 移除公钥命令
 var removeCmd = &cobra.Command{
-	Use:   "remove <TARGET>",
+	Use:   "remove [TARGET]",
 	Short: "移除用户的 SSH 公钥",
 	Long: `移除指定用户的 SSH 公钥。
 
-TARGET 格式: [SOURCE_ALIAS|URL][:USERNAME]
-或使用 --fingerprint 直接按指纹删除。`,
+TARGET 格式: SOURCE_ALIAS:USERNAME
+或使用 --fingerprint 按指纹删除，或使用 --all-from-source 删除整个源。`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// 创建服务
-		svc := service.NewRemoveService(cfg, mgr)
-
-		// 按指纹删除
-		if removeFingerprint != "" {
-			result, err := svc.Run("", "", removeFingerprint)
-			if err != nil {
-				return fmt.Errorf("remove failed: %w", err)
-			}
-			printResult(result)
-			printOutputFile(mgr)
-			return nil
+		if removeFingerprint != "" && removeAllFromSource != "" {
+			return fmt.Errorf("--fingerprint and --all-from-source cannot be used together")
+		}
+		if (removeFingerprint != "" || removeAllFromSource != "") && len(args) > 0 {
+			return fmt.Errorf("TARGET cannot be combined with --fingerprint or --all-from-source")
 		}
 
-		// 删除指定源下所有用户
-		if removeAllFromSource != "" {
-			removed, err := mgr.RemoveAllFromSource(removeAllFromSource)
-			if err != nil {
-				return fmt.Errorf("remove failed: %w", err)
-			}
-			status := "success"
-			action := "removed"
-			if removed == 0 {
-				status = "not_found"
-				action = "not_found"
-			}
-			if jsonOutput {
-				printResult(map[string]interface{}{
-					"status":  status,
-					"action":  action,
-					"source":  removeAllFromSource,
-					"removed": removed,
-				})
-			} else {
-				fmt.Printf("Status:   %s\n", status)
-				fmt.Printf("Action:   %s\n", action)
-				fmt.Printf("Source:   %s\n", removeAllFromSource)
-				fmt.Printf("Removed:  %d key(s)\n", removed)
-			}
-			printOutputFile(mgr)
-			return nil
+		opts := service.RemoveOptions{
+			Fingerprint:   removeFingerprint,
+			AllFromSource: removeAllFromSource != "",
+			Source:        removeAllFromSource,
+			DryRun:        dryRun,
 		}
 
-		// 按 TARGET 删除
-		if len(args) == 0 {
+		switch {
+		case removeAllFromSource != "":
+			// 源名由服务层解析别名
+		case removeFingerprint != "":
+			// 仅按指纹删除
+		case len(args) == 0:
 			return fmt.Errorf("TARGET argument is required (or use --fingerprint/--all-from-source)")
+		default:
+			if strings.HasPrefix(args[0], "http://") || strings.HasPrefix(args[0], "https://") {
+				return fmt.Errorf("URL TARGET is not supported for remove; use --fingerprint")
+			}
+			source, user, err := parseTarget(args[0], "")
+			if err != nil {
+				return err
+			}
+			opts.Source = source
+			opts.User = user
 		}
 
-		source, user, err := parseTarget(args[0])
-		if err != nil {
-			return err
-		}
-
-		result, err := svc.Run(source, user, "")
+		svc := service.NewRemoveService(cfg, mgr)
+		result, err := svc.Run(opts)
 		if err != nil {
 			return fmt.Errorf("remove failed: %w", err)
 		}
-
 		printResult(result)
-		printOutputFile(mgr)
 		return nil
 	},
 }
 
+// init 注册 remove 子命令的删除方式参数。
 func init() {
 	removeCmd.Flags().StringVar(&removeFingerprint, "fingerprint", "", "按 SHA256 指纹删除")
 	removeCmd.Flags().StringVar(&removeAllFromSource, "all-from-source", "", "删除指定源下所有用户")

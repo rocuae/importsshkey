@@ -5,9 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
+)
+
+var (
+	userPattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9+_.@~-]{0,127}$`)
+	sourcePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@+-]{0,63}$`)
 )
 
 // KeyEntry 公钥实体，表示一条 SSH 公钥记录
@@ -39,6 +45,9 @@ func NewKeyEntry(pubKey, source, user string) (*KeyEntry, error) {
 	if pubKey == "" {
 		return nil, ErrEmptyKey
 	}
+	if err := ValidateTarget(source, user); err != nil {
+		return nil, err
+	}
 
 	// 校验公钥格式
 	if err := ValidatePublicKey(pubKey); err != nil {
@@ -58,6 +67,30 @@ func NewKeyEntry(pubKey, source, user string) (*KeyEntry, error) {
 		Fingerprint: fp,
 		Comment:     FormatComment(source, user, fp),
 	}, nil
+}
+
+// ValidateUser 校验用户名，禁止空白、冒号和路径分隔符，避免注释与 URL 注入。
+func ValidateUser(user string) error {
+	if !userPattern.MatchString(user) {
+		return fmt.Errorf("%w: %q", ErrInvalidUser, user)
+	}
+	return nil
+}
+
+// ValidateSource 校验来源标识，禁止空白和冒号，避免破坏注释格式。
+func ValidateSource(source string) error {
+	if !sourcePattern.MatchString(source) {
+		return fmt.Errorf("%w: %q", ErrInvalidSource, source)
+	}
+	return nil
+}
+
+// ValidateTarget 同时校验来源和用户名。
+func ValidateTarget(source, user string) error {
+	if err := ValidateSource(source); err != nil {
+		return err
+	}
+	return ValidateUser(user)
 }
 
 // ValidatePublicKey 校验 SSH 公钥格式是否合法

@@ -1,132 +1,144 @@
-#!/bin/bash
-# 端到端测试脚本
+#!/usr/bin/env bash
+# 端到端测试：真实启动 iskey-server，验证多公钥 CRUD 与鉴权
+set -euo pipefail
 
-set -e
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TMP_DIR="$(mktemp -d)"
+PORT="${E2E_PORT:-18080}"
+BASE_URL="http://127.0.0.1:${PORT}"
+ADMIN_TOKEN="e2e-token-$(date +%s)"
+SERVER_PID=""
 
-SERVER_URL="http://localhost:8080"
-ADMIN_TOKEN="test-token-123"
-TEST_USER="testuser"
-TEST_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test@iskey"
+cleanup() {
+  if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+fail() {
+  echo "   ✗ $*" >&2
+  if [[ -f "$TMP_DIR/server.log" ]]; then
+    echo "--- server.log ---" >&2
+    tail -50 "$TMP_DIR/server.log" >&2
+  fi
+  exit 1
+}
 
 echo "=== iskey-server 端到端测试 ==="
 
-# 启动服务器
-export ADMIN_TOKEN="$ADMIN_TOKEN"
-export DB_DSN="./test.db"
-export SERVER_PORT="8080"
+ssh-keygen -q -t ed25519 -N '' -C 'e2e-1' -f "$TMP_DIR/key1"
+ssh-keygen -q -t ed25519 -N '' -C 'e2e-2' -f "$TMP_DIR/key2"
+ssh-keygen -q -t ed25519 -N '' -C 'e2e-3' -f "$TMP_DIR/key3"
+KEY1="$(cat "$TMP_DIR/key1.pub")"
+KEY2="$(cat "$TMP_DIR/key2.pub")"
+KEY3="$(cat "$TMP_DIR/key3.pub")"
 
-echo "启动服务器..."
-./bin/iskey-server &
+echo "启动服务器 ($BASE_URL)..."
+DB_PATH="$TMP_DIR/iskey.db" \
+SERVER_PORT="$PORT" \
+ADMIN_TOKEN="$ADMIN_TOKEN" \
+ALLOWED_ORIGINS="*" \
+"$ROOT_DIR/bin/iskey-server" server -f >"$TMP_DIR/server.log" 2>&1 &
 SERVER_PID=$!
-sleep 2
 
-# 测试健康检查
-echo "1. 测试健康检查..."
-HEALTH=$(curl -s "$SERVER_URL/health")
-echo "   响应: $HEALTH"
-if echo "$HEALTH" | grep -q '"status":"ok"'; then
-    echo "   ✓ 健康检查通过"
-else
-    echo "   ✗ 健康检查失败"
-    exit 1
-fi
+READY=0
+for _ in $(seq 1 50); do
+  if curl -fsS "$BASE_URL/health" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  sleep 0.2
+done
+[[ "$READY" = "1" ]] || fail "服务器未就绪"
 
-# 测试获取不存在的用户
-echo "2. 测试获取不存在的用户..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/keys/nonexistent")
-if [ "$HTTP_CODE" = "404" ]; then
-    echo "   ✓ 返回 404"
-else
-    echo "   ✗ 期望 404，实际 $HTTP_CODE"
-    exit 1
-fi
+echo "1. 健康检查"
+HEALTH="$(curl -fsS "$BASE_URL/health")"
+echo "$HEALTH" | grep -q '"status":"ok"' || fail "健康检查失败: $HEALTH"
+echo "   ✓"
 
-# 测试添加公钥（无认证）
-echo "3. 测试添加公钥（无认证）..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "$SERVER_URL/keys/$TEST_USER" \
-    -H "Content-Type: application/json" \
-    -d "{\"public_key\": \"$TEST_KEY\"}")
-if [ "$HTTP_CODE" = "401" ]; then
-    echo "   ✓ 返回 401（缺少 Authorization）"
-else
-    echo "   ✗ 期望 401，实际 $HTTP_CODE"
-    exit 1
-fi
+echo "2. 不存在的用户返回 404"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/keys/nonexistent")"
+[[ "$CODE" = "404" ]] || fail "期望 404，实际 $CODE"
+echo "   ✓"
 
-# 测试添加公钥（带认证）
-echo "4. 测试添加公钥（带认证）..."
-RESPONSE=$(curl -s -X PUT "$SERVER_URL/keys/$TEST_USER" \
-    -H "Authorization: Bearer $ADMIN_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"public_key\": \"$TEST_KEY\", \"source\": \"test\"}")
-echo "   响应: $RESPONSE"
-if echo "$RESPONSE" | grep -q '"success":true'; then
-    echo "   ✓ 添加成功"
-else
-    echo "   ✗ 添加失败"
-    exit 1
-fi
+echo "3. 未认证写入返回 401"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE_URL/keys/e2euser" \
+  -H 'Content-Type: application/json' \
+  -d "{\"public_key\":\"$KEY1\"}")"
+[[ "$CODE" = "401" ]] || fail "期望 401，实际 $CODE"
+echo "   ✓"
 
-# 测试获取公钥
-echo "5. 测试获取公钥..."
-RETRIEVED_KEY=$(curl -s "$SERVER_URL/keys/$TEST_USER")
-if [ "$RETRIEVED_KEY" = "$TEST_KEY" ]; then
-    echo "   ✓ 公钥匹配"
-else
-    echo "   ✗ 公钥不匹配"
-    echo "   期望: $TEST_KEY"
-    echo "   实际: $RETRIEVED_KEY"
-    exit 1
-fi
+echo "4. 写入两把公钥（PUT 全量替换）"
+RESP="$(curl -fsS -X PUT "$BASE_URL/keys/e2euser" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"keys\":[{\"public_key\":\"$KEY1\",\"source\":\"e2e\"},{\"public_key\":\"$KEY2\",\"source\":\"e2e\"}]}")"
+echo "$RESP" | grep -q '"count":2' || fail "写入失败: $RESP"
+echo "   ✓"
 
-# 测试获取元数据
-echo "6. 测试获取元数据..."
-METADATA=$(curl -s "$SERVER_URL/keys/$TEST_USER/metadata")
-echo "   响应: $METADATA"
-if echo "$METADATA" | grep -q '"public_key_exists":true'; then
-    echo "   ✓ 元数据获取成功"
-else
-    echo "   ✗ 元数据获取失败"
-    exit 1
-fi
+echo "5. GET 返回两把公钥且以换行结尾"
+curl -fsS -o "$TMP_DIR/body" "$BASE_URL/keys/e2euser"
+BODY="$(cat "$TMP_DIR/body")"
+[[ "$(printf '%s\n' "$BODY" | grep -c '^ssh-')" = "2" ]] || fail "公钥数量不是 2"
+[[ "$(tail -c 1 "$TMP_DIR/body" | od -An -t u1 | tr -d ' ')" = "10" ]] || fail "响应缺少结尾换行"
+echo "   ✓"
 
-# 测试列出用户
-echo "7. 测试列出用户..."
-LIST=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" "$SERVER_URL/keys")
-echo "   响应: $LIST"
-if echo "$LIST" | grep -q "\"$TEST_USER\""; then
-    echo "   ✓ 列出用户成功"
-else
-    echo "   ✗ 列出用户失败"
-    exit 1
-fi
+echo "6. POST 追加第三把公钥"
+RESP="$(curl -fsS -X POST "$BASE_URL/keys/e2euser" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"public_key\":\"$KEY3\",\"source\":\"e2e\"}")"
+echo "$RESP" | grep -q '"count":3' || fail "追加失败: $RESP"
+echo "   ✓"
 
-# 测试删除公钥
-echo "8. 测试删除公钥..."
-DELETE_RESPONSE=$(curl -s -X DELETE "$SERVER_URL/keys/$TEST_USER" \
-    -H "Authorization: Bearer $ADMIN_TOKEN")
-echo "   响应: $DELETE_RESPONSE"
-if echo "$DELETE_RESPONSE" | grep -q '"success":true'; then
-    echo "   ✓ 删除成功"
-else
-    echo "   ✗ 删除失败"
-    exit 1
-fi
+echo "7. 元数据包含 3 把公钥"
+META="$(curl -fsS "$BASE_URL/keys/e2euser/metadata")"
+echo "$META" | grep -q '"count":3' || fail "元数据错误: $META"
+FINGERPRINT="$(printf '%s' "$META" | grep -o '"fingerprint":"[^"]*"' | head -1 | cut -d'"' -f4)"
+[[ -n "$FINGERPRINT" ]] || fail "无法提取指纹"
+echo "   ✓ ($FINGERPRINT)"
 
-# 验证删除后获取
-echo "9. 验证删除后获取..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/keys/$TEST_USER")
-if [ "$HTTP_CODE" = "404" ]; then
-    echo "   ✓ 返回 404"
-else
-    echo "   ✗ 期望 404，实际 $HTTP_CODE"
-    exit 1
-fi
+echo "8. 按指纹删除单把公钥"
+ENCODED_FP="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$FINGERPRINT")"
+RESP="$(curl -fsS -X DELETE "$BASE_URL/keys/e2euser?fingerprint=$ENCODED_FP" \
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
+echo "$RESP" | grep -q '"removed":1' || fail "按指纹删除失败: $RESP"
+echo "   ✓"
 
-# 清理
-echo "清理..."
-kill $SERVER_PID 2>/dev/null || true
-rm -f test.db
+echo "9. 剩余 2 把公钥"
+META="$(curl -fsS "$BASE_URL/keys/e2euser/metadata")"
+echo "$META" | grep -q '"count":2' || fail "删除后元数据错误: $META"
+echo "   ✓"
+
+echo "10. 分页列表包含用户"
+LIST="$(curl -fsS -H "Authorization: Bearer $ADMIN_TOKEN" "$BASE_URL/keys?page=1&page_size=10&q=e2e")"
+echo "$LIST" | grep -q '"e2euser"' || fail "列表缺少用户: $LIST"
+echo "   ✓"
+
+echo "11. 非法公钥返回 400"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE_URL/keys/baduser" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"public_key":"ssh-garbage"}')"
+[[ "$CODE" = "400" ]] || fail "期望 400，实际 $CODE"
+echo "   ✓"
+
+echo "12. 统计接口不暴露用户名"
+STATS="$(curl -fsS "$BASE_URL/stats")"
+echo "$STATS" | grep -q '"total_keys":2' || fail "统计错误: $STATS"
+if echo "$STATS" | grep -q 'e2euser'; then fail "统计泄露用户名"; fi
+echo "   ✓"
+
+echo "13. 删除用户"
+RESP="$(curl -fsS -X DELETE "$BASE_URL/keys/e2euser" \
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
+echo "$RESP" | grep -q '"removed":2' || fail "删除用户失败: $RESP"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/keys/e2euser")"
+[[ "$CODE" = "404" ]] || fail "删除后期望 404，实际 $CODE"
+echo "   ✓"
 
 echo ""
-echo "=== 所有测试通过 ✓ ==="
+echo "=== 所有端到端测试通过 ✓ ==="

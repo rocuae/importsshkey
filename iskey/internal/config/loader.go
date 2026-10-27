@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,26 +54,28 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
 
-	// 环境变量替换
-	expanded := expandEnvVars(string(data))
-
-	// 解析 YAML
-	var cfg Config
-	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, fmt.Errorf("parse config file: %w", err)
+	}
+
+	// 只对 YAML 字符串节点的值做环境变量替换。直接对整份文本做替换会让
+	// 环境变量里的换行/冒号破坏 YAML 结构。
+	expandEnvNode(&root)
+
+	var cfg Config
+	if len(root.Content) > 0 {
+		if err := root.Decode(&cfg); err != nil {
+			return nil, fmt.Errorf("parse config file: %w", err)
+		}
 	}
 
 	// 设置默认值
 	setDefaults(&cfg)
 
-	// 验证配置
+	// 验证配置（不读取凭据环境变量，未使用的凭据不应导致命令失败）
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
-	}
-
-	// 解析凭证环境变量
-	if err := cfg.ResolveCredentials(); err != nil {
-		return nil, fmt.Errorf("resolve credentials: %w", err)
 	}
 
 	return &cfg, nil
@@ -86,7 +89,7 @@ func (l *Loader) LoadOrDefault() (*Config, error) {
 	cfg, err := l.Load()
 	if err != nil {
 		// 如果是配置文件不存在，返回默认配置
-		if strings.Contains(err.Error(), "config file not found") {
+		if errors.Is(err, ErrConfigNotFound) {
 			return DefaultConfig(), nil
 		}
 		return nil, err
@@ -122,6 +125,21 @@ func expandEnvVars(s string) string {
 		}
 		return os.Getenv(key)
 	})
+}
+
+// expandEnvNode 递归展开 YAML 字符串节点中的环境变量。
+// 只修改标量字符串的值，不会改变文档结构。
+func expandEnvNode(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	if node.Kind == yaml.ScalarNode && (node.Tag == "!!str" || node.Tag == "") {
+		node.Value = expandEnvVars(node.Value)
+		return
+	}
+	for _, child := range node.Content {
+		expandEnvNode(child)
+	}
 }
 
 // setDefaults 设置配置默认值

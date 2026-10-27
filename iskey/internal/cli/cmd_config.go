@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/rocuae/importsshkey/internal/config"
 	"github.com/rocuae/importsshkey/internal/fetcher"
@@ -15,6 +19,8 @@ var (
 	configOutput string
 	// configForce 强制覆盖
 	configForce bool
+	// configVerifyNetwork 是否探测静态 URL
+	configVerifyNetwork bool
 )
 
 // configCmd 配置管理命令
@@ -32,7 +38,7 @@ var configInitCmd = &cobra.Command{
 
 默认路径: ~/.config/iskey/sources.yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		outputPath := configOutput
+		outputPath := expandPath(configOutput)
 		if outputPath == "" {
 			outputPath = config.DefaultConfigPath()
 		}
@@ -61,7 +67,12 @@ var configListCmd = &cobra.Command{
 	Short: "列出所有数据源",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cfg == nil {
-			return fmt.Errorf("config not loaded")
+			loader := config.NewLoader(expandPath(configFile))
+			loaded, err := loader.LoadOrDefault()
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+			cfg = loaded
 		}
 
 		if jsonOutput {
@@ -82,7 +93,13 @@ var configListCmd = &cobra.Command{
 		// 显示用户配置的源
 		if len(cfg.Sources) > 0 {
 			fmt.Println("Custom sources:")
-			for name, src := range cfg.Sources {
+			names := make([]string, 0, len(cfg.Sources))
+			for name := range cfg.Sources {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				src := cfg.Sources[name]
 				fmt.Printf("  %s (%s)\n", name, src.Alias)
 				fmt.Printf("    URL: %s\n", src.URL)
 				fmt.Printf("    Format: %s\n", src.Format)
@@ -128,10 +145,18 @@ var configSetCmd = &cobra.Command{
 			return fmt.Errorf("cannot override builtin source: %s", alias)
 		}
 
+		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			return fmt.Errorf("invalid URL %q: scheme must be http or https", url)
+		}
+
 		// 自动补充模板变量：无模板变量的 URL 自动追加 /keys/{{ .User }}
 		if !containsTemplateVar(url) {
 			url = strings.TrimRight(url, "/")
-			url += "/keys/{{ .User }}"
+			if strings.HasSuffix(url, "/keys") {
+				url += "/{{ .User }}"
+			} else {
+				url += "/keys/{{ .User }}"
+			}
 		}
 
 		// 创建源配置
@@ -211,7 +236,7 @@ var configUnsetCmd = &cobra.Command{
 // configVerifyCmd 校验配置
 var configVerifyCmd = &cobra.Command{
 	Use:   "verify",
-	Short: "校验配置文件语法和 URL 可达性",
+	Short: "校验配置文件语法、凭据环境和 URL 可达性",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		configPath := expandPath(configFile)
 		loader := config.NewLoader(configPath)
@@ -228,39 +253,90 @@ var configVerifyCmd = &cobra.Command{
 		}
 
 		fmt.Println("Config file is valid.")
-		fmt.Println()
+		failed := false
 
-		// 显示内置源
+		fmt.Println()
 		fmt.Println("Builtin sources:")
 		fmt.Println("  gh (github) - builtin")
 		fmt.Println("  lp (launchpad) - builtin")
 
-		// 显示自定义源
-		if len(loadedCfg.Sources) > 0 {
+		names := make([]string, 0, len(loadedCfg.Sources))
+		for name := range loadedCfg.Sources {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		if len(names) > 0 {
 			fmt.Println()
 			fmt.Println("Custom sources:")
-			for name, src := range loadedCfg.Sources {
+			for _, name := range names {
+				src := loadedCfg.Sources[name]
 				fmt.Printf("  %s (%s)\n", name, src.Alias)
+				if src.AuthRef == "" {
+					continue
+				}
+				if _, err := loadedCfg.ResolveCredential(src.AuthRef); err != nil {
+					fmt.Fprintf(os.Stderr, "  credential %s: %v\n", src.AuthRef, err)
+					failed = true
+				}
 			}
 		}
 
-		// 显示凭证
 		if len(loadedCfg.Credentials) > 0 {
 			fmt.Println()
 			fmt.Println("Credentials:")
-			for name, cred := range loadedCfg.Credentials {
-				fmt.Printf("  %s - %s\n", name, cred.Type)
+			credNames := make([]string, 0, len(loadedCfg.Credentials))
+			for name := range loadedCfg.Credentials {
+				credNames = append(credNames, name)
+			}
+			sort.Strings(credNames)
+			for _, name := range credNames {
+				fmt.Printf("  %s - %s\n", name, loadedCfg.Credentials[name].Type)
 			}
 		}
 
+		if configVerifyNetwork {
+			fmt.Println()
+			fmt.Println("URL reachability:")
+			client := &http.Client{Timeout: 5 * time.Second}
+			if loadedCfg.Defaults.InsecureSkipVerify {
+				transport := http.DefaultTransport.(*http.Transport).Clone()
+				transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}
+				client.Transport = transport
+			}
+			for _, name := range names {
+				src := loadedCfg.Sources[name]
+				if strings.Contains(src.URL, "{{") {
+					fmt.Printf("  %s: skipped (URL template)\n", name)
+					continue
+				}
+				resp, err := client.Get(src.URL)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "  %s: %v\n", name, err)
+					failed = true
+					continue
+				}
+				_ = resp.Body.Close()
+				fmt.Printf("  %s: HTTP %d\n", name, resp.StatusCode)
+				if resp.StatusCode >= 300 {
+					failed = true
+				}
+			}
+		}
+
+		if failed {
+			return fmt.Errorf("config verification failed")
+		}
 		return nil
 	},
 }
 
+// init 注册 config 子命令与 --network 参数。
 func init() {
 	// init 命令参数
 	configInitCmd.Flags().StringVarP(&configOutput, "output", "o", "", "输出路径（默认 ~/.config/iskey/sources.yaml）")
 	configInitCmd.Flags().BoolVarP(&configForce, "force", "f", false, "强制覆盖已存在的文件")
+	configVerifyCmd.Flags().BoolVar(&configVerifyNetwork, "network", false, "探测静态 URL 的可达性（模板 URL 会跳过）")
 
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configListCmd)

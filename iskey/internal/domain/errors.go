@@ -13,6 +13,10 @@ var (
 	ErrConfigNotFound = errors.New("config file not found")
 	// ErrSourceNotFound 数据源不存在
 	ErrSourceNotFound = errors.New("source not found")
+	// ErrInvalidSource 来源标识非法
+	ErrInvalidSource = errors.New("invalid source name")
+	// ErrInvalidUser 用户名非法
+	ErrInvalidUser = errors.New("invalid user name")
 	// ErrAuthFailed 认证失败
 	ErrAuthFailed = errors.New("authentication failed")
 	// ErrNetworkTimeout 网络超时

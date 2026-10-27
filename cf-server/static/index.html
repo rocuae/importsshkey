@@ -1,3 +1,4 @@
+<!-- iskey 管理界面：单页应用，通过 /keys API 管理多把 SSH 公钥。 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -7,7 +8,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; }
-    .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
     .header { background: #2563eb; color: white; padding: 24px; border-radius: 8px; margin-bottom: 20px; }
     .header h1 { font-size: 24px; margin-bottom: 4px; }
     .header p { opacity: 0.9; }
@@ -22,39 +23,40 @@
     .activity-list { list-style: none; }
     .activity-item { padding: 12px 0; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
     .activity-item:last-child { border-bottom: none; }
-    .activity-user { font-weight: 500; }
     .activity-time { font-size: 14px; color: #6b7280; }
     .activity-action { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
     .action-add { background: #dcfce7; color: #166534; }
-    .action-update { background: #dbeafe; color: #1e40af; }
+    .action-replace { background: #dbeafe; color: #1e40af; }
     .action-delete { background: #fee2e2; color: #991b1b; }
     .login-form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .login-form input { flex: 1; min-width: 200px; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
     .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary { background: #2563eb; color: white; }
-    .btn-primary:hover { background: #1d4ed8; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
     .btn-danger { background: #dc2626; color: white; }
-    .btn-danger:hover { background: #b91c1c; }
+    .btn-danger:hover:not(:disabled) { background: #b91c1c; }
     .btn-sm { padding: 6px 12px; font-size: 12px; }
     .admin-panel { display: none; }
     .admin-panel.active { display: block; }
     .query-section { display: none; }
     .query-section.active { display: block; }
-    .query-result { margin-top: 12px; padding: 12px; background: #f3f4f6; border-radius: 6px; font-family: monospace; font-size: 13px; word-break: break-all; display: none; }
+    .query-result { margin-top: 12px; padding: 12px; background: #f3f4f6; border-radius: 6px; font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; display: none; }
     .query-result.active { display: block; }
+    .query-result.error { color: #dc2626; }
     .user-table { width: 100%; border-collapse: collapse; }
-    .user-table th, .user-table td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    .user-table th, .user-table td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
     .user-table th { font-weight: 600; color: #6b7280; font-size: 14px; }
     .add-form { display: grid; gap: 12px; }
     .add-form input, .add-form textarea { padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
-    .add-form textarea { min-height: 80px; resize: vertical; }
+    .add-form textarea { min-height: 100px; resize: vertical; font-family: monospace; }
     .key-input-group { display: grid; gap: 8px; }
     .file-input-row { display: flex; align-items: center; gap: 8px; }
     .file-hint { font-size: 13px; color: #6b7280; }
     .btn-secondary { background: #6b7280; color: white; }
-    .btn-secondary:hover { background: #4b5563; }
+    .btn-secondary:hover:not(:disabled) { background: #4b5563; }
     .api-list { font-family: monospace; font-size: 14px; }
-    .api-item { padding: 8px 0; display: flex; gap: 12px; }
+    .api-item { padding: 8px 0; display: flex; gap: 12px; flex-wrap: wrap; }
     .api-method { font-weight: bold; min-width: 60px; }
     .api-path { color: #2563eb; }
     .api-auth { font-size: 12px; color: #6b7280; }
@@ -63,7 +65,12 @@
     .message.error { display: block; background: #fee2e2; color: #991b1b; }
     .logout-btn { background: none; border: 1px solid white; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
     .logout-btn:hover { background: rgba(255,255,255,0.1); }
-    .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .toolbar input { flex: 1; min-width: 160px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; }
+    .page-info { color: #6b7280; font-size: 13px; }
+    .checkbox-row { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #4b5563; }
+    .muted { color: #6b7280; }
   </style>
 </head>
 <body>
@@ -74,7 +81,7 @@
           <h1>iskey-server</h1>
           <p>SSH 公钥分发服务</p>
         </div>
-        <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()">退出登录</button>
+        <button class="logout-btn" id="logoutBtn" style="display:none" type="button">退出登录</button>
       </div>
       <div class="status">
         <span class="status-dot"></span>
@@ -85,29 +92,22 @@
     <div class="card">
       <h2>统计数据</h2>
       <div class="stats">
-        <div class="stat">
-          <div class="stat-value" id="totalUsers">-</div>
-          <div class="stat-label">用户数</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" id="version">-</div>
-          <div class="stat-label">版本</div>
-        </div>
+        <div class="stat"><div class="stat-value" id="totalUsers">-</div><div class="stat-label">用户数</div></div>
+        <div class="stat"><div class="stat-value" id="totalKeys">-</div><div class="stat-label">公钥数</div></div>
+        <div class="stat"><div class="stat-value" id="version">-</div><div class="stat-label">版本</div></div>
       </div>
     </div>
 
     <div class="card">
       <h2>最近活动</h2>
-      <ul class="activity-list" id="activityList">
-        <li class="activity-item">加载中...</li>
-      </ul>
+      <ul class="activity-list" id="activityList"><li class="activity-item muted">加载中...</li></ul>
     </div>
 
     <div class="card query-section" id="querySection">
       <h2>查询公钥</h2>
       <div class="login-form">
         <input type="text" id="queryUser" placeholder="输入用户名...">
-        <button class="btn btn-primary" onclick="queryKey()">查询</button>
+        <button class="btn btn-primary" type="button" id="queryBtn">查询</button>
       </div>
       <div class="query-result" id="queryResult"></div>
     </div>
@@ -115,10 +115,10 @@
     <div class="card">
       <h2>管理面板</h2>
       <div id="loginPanel">
-        <p style="margin-bottom: 12px; color: #6b7280;">输入 Admin Token 登录以管理公钥</p>
+        <p class="muted" style="margin-bottom: 12px;">输入 Admin Token 登录以管理公钥</p>
         <div class="login-form">
           <input type="password" id="tokenInput" placeholder="输入 Admin Token...">
-          <button class="btn btn-primary" onclick="login()">登录</button>
+          <button class="btn btn-primary" type="button" id="loginBtn">登录</button>
         </div>
         <div class="message" id="loginMessage"></div>
       </div>
@@ -127,33 +127,34 @@
         <div class="message" id="adminMessage"></div>
 
         <h3 style="margin-bottom: 12px;">用户列表</h3>
+        <div class="toolbar">
+          <input type="text" id="searchInput" placeholder="按用户名搜索...">
+          <button class="btn btn-secondary btn-sm" type="button" id="searchBtn">搜索</button>
+          <span class="page-info" id="pageInfo"></span>
+          <button class="btn btn-secondary btn-sm" type="button" id="prevBtn">上一页</button>
+          <button class="btn btn-secondary btn-sm" type="button" id="nextBtn">下一页</button>
+        </div>
         <table class="user-table">
           <thead>
-            <tr>
-              <th>用户名</th>
-              <th>来源</th>
-              <th>更新时间</th>
-              <th>操作</th>
-            </tr>
+            <tr><th>用户名</th><th>公钥数</th><th>来源</th><th>更新时间</th><th>操作</th></tr>
           </thead>
-          <tbody id="userTableBody">
-            <tr><td colspan="4">加载中...</td></tr>
-          </tbody>
+          <tbody id="userTableBody"><tr><td colspan="5">加载中...</td></tr></tbody>
         </table>
 
-        <h3 style="margin: 20px 0 12px;">添加用户</h3>
+        <h3 style="margin: 24px 0 12px;">添加 / 替换公钥</h3>
         <div class="add-form">
           <input type="text" id="addUsername" placeholder="用户名">
           <div class="key-input-group">
-            <textarea id="addPublicKey" placeholder="SSH 公钥内容"></textarea>
+            <textarea id="addPublicKey" placeholder="每行一把 SSH 公钥"></textarea>
             <div class="file-input-row">
-              <input type="file" id="keyFile" accept=".pub" onchange="loadKeyFile(this)" style="display:none">
-              <button class="btn btn-secondary" onclick="document.getElementById('keyFile').click()">选择文件</button>
+              <input type="file" id="keyFile" accept=".pub,text/plain" style="display:none">
+              <button class="btn btn-secondary" type="button" id="fileBtn">选择文件</button>
               <span id="fileHint" class="file-hint"></span>
             </div>
           </div>
           <input type="text" id="addSource" placeholder="来源（可选）">
-          <button class="btn btn-primary" onclick="addKey()">添加</button>
+          <label class="checkbox-row"><input type="checkbox" id="replaceAll"> 替换该用户的全部公钥（默认追加）</label>
+          <button class="btn btn-primary" type="button" id="addBtn">提交</button>
         </div>
       </div>
     </div>
@@ -161,286 +162,337 @@
     <div class="card">
       <h2>API 端点</h2>
       <div class="api-list">
-        <div class="api-item">
-          <span class="api-method">GET</span>
-          <span class="api-path">/keys/:username</span>
-          <span class="api-auth">需认证</span>
-        </div>
-        <div class="api-item">
-          <span class="api-method">PUT</span>
-          <span class="api-path">/keys/:username</span>
-          <span class="api-auth">需认证</span>
-        </div>
-        <div class="api-item">
-          <span class="api-method">DELETE</span>
-          <span class="api-path">/keys/:username</span>
-          <span class="api-auth">需认证</span>
-        </div>
-        <div class="api-item">
-          <span class="api-method">GET</span>
-          <span class="api-path">/keys</span>
-          <span class="api-auth">需认证</span>
-        </div>
-        <div class="api-item">
-          <span class="api-method">GET</span>
-          <span class="api-path">/health</span>
-          <span class="api-auth">公开</span>
-        </div>
-        <div class="api-item">
-          <span class="api-method">GET</span>
-          <span class="api-path">/stats</span>
-          <span class="api-auth">公开</span>
-        </div>
+        <div class="api-item"><span class="api-method">GET</span><span class="api-path">/keys/:username</span><span class="api-auth">公开</span></div>
+        <div class="api-item"><span class="api-method">GET</span><span class="api-path">/keys/:username/metadata</span><span class="api-auth">公开</span></div>
+        <div class="api-item"><span class="api-method">POST</span><span class="api-path">/keys/:username</span><span class="api-auth">需认证（追加）</span></div>
+        <div class="api-item"><span class="api-method">PUT</span><span class="api-path">/keys/:username</span><span class="api-auth">需认证（全量替换）</span></div>
+        <div class="api-item"><span class="api-method">DELETE</span><span class="api-path">/keys/:username[?fingerprint=]</span><span class="api-auth">需认证</span></div>
+        <div class="api-item"><span class="api-method">GET</span><span class="api-path">/keys?page=&amp;page_size=&amp;q=</span><span class="api-auth">需认证</span></div>
+        <div class="api-item"><span class="api-method">GET</span><span class="api-path">/health</span><span class="api-auth">公开</span></div>
+        <div class="api-item"><span class="api-method">GET</span><span class="api-path">/stats</span><span class="api-auth">公开</span></div>
       </div>
     </div>
   </div>
 
   <script>
+    // 页面状态：分页、搜索与管理员 Token 均只保存在当前标签页。
+    'use strict';
     let adminToken = '';
+    const state = { page: 1, pageSize: 50, total: 0, query: '' };
 
-    // 页面加载时获取统计数据
-    window.onload = function() {
-      loadStats();
-      // 检查是否有保存的 token
-      const savedToken = sessionStorage.getItem('admin_token');
-      if (savedToken) {
-        adminToken = savedToken;
-        verifyToken();
+    const $ = (id) => document.getElementById(id);
+
+    /** 在指定提示区域显示成功/错误消息。 */
+    function setMessage(id, text, type) {
+      const el = $(id);
+      el.textContent = text;
+      el.className = 'message ' + type;
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 4000);
+    }
+
+    /** 带管理员 Token 的 fetch 封装；401 时清理本地登录态。 */
+    async function api(path, options = {}) {
+      const headers = Object.assign({}, options.headers || {});
+      if (adminToken) headers['Authorization'] = 'Bearer ' + adminToken;
+      const resp = await fetch(path, Object.assign({}, options, { headers }));
+      if (resp.status === 401) {
+        logout();
       }
-    };
+      return resp;
+    }
 
+    /** 加载公开统计并渲染最近活动（后端不返回用户名）。 */
     async function loadStats() {
       try {
         const resp = await fetch('/stats');
         const data = await resp.json();
-        document.getElementById('totalUsers').textContent = data.total_users;
-        document.getElementById('version').textContent = data.version || 'v1';
+        $('totalUsers').textContent = data.total_users ?? '-';
+        $('totalKeys').textContent = data.total_keys ?? '-';
+        $('version').textContent = data.version || 'v1';
 
-        const activityList = document.getElementById('activityList');
-        if (data.recent_activity && data.recent_activity.length > 0) {
-          activityList.innerHTML = data.recent_activity.map(item => {
-            const time = new Date(item.time).toLocaleString('zh-CN');
-            const actionClass = item.action === 'add' ? 'action-add' : item.action === 'delete' ? 'action-delete' : 'action-update';
-            const actionText = item.action === 'add' ? '添加' : item.action === 'delete' ? '删除' : '更新';
-            return '<li class="activity-item">' +
-              '<div><span class="activity-user">' + item.user + '</span> <span class="activity-action ' + actionClass + '">' + actionText + '公钥</span></div>' +
-              '<span class="activity-time">' + time + '</span>' +
-            '</li>';
-          }).join('');
+        const list = $('activityList');
+        list.replaceChildren();
+        if (Array.isArray(data.recent_activity) && data.recent_activity.length > 0) {
+          for (const item of data.recent_activity) {
+            const li = document.createElement('li');
+            li.className = 'activity-item';
+            const left = document.createElement('div');
+            const action = document.createElement('span');
+            action.className = 'activity-action ' + (item.action === 'add' ? 'action-add' : item.action === 'delete' ? 'action-delete' : 'action-replace');
+            action.textContent = ({ add: '添加', replace: '替换', delete: '删除' })[item.action] || item.action;
+            left.appendChild(action);
+            const time = document.createElement('span');
+            time.className = 'activity-time';
+            time.textContent = formatTime(item.time);
+            li.append(left, time);
+            list.appendChild(li);
+          }
         } else {
-          activityList.innerHTML = '<li class="activity-item">暂无活动记录</li>';
+          const li = document.createElement('li');
+          li.className = 'activity-item muted';
+          li.textContent = '暂无活动记录';
+          list.appendChild(li);
         }
-      } catch (e) {
-        console.error('Failed to load stats:', e);
+      } catch (err) {
+        console.error('Failed to load stats:', err);
       }
     }
 
-    async function login() {
-      const token = document.getElementById('tokenInput').value.trim();
-      if (!token) return;
+    /** 将 ISO 时间格式化为本地可读文本。 */
+    function formatTime(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN');
+    }
 
+    /** 保存 Token 并通过只读接口验证其有效性。 */
+    async function login() {
+      const token = $('tokenInput').value.trim();
+      if (!token) return;
       adminToken = token;
       await verifyToken();
     }
 
+    /** 使用分页列表接口探测当前 Token 是否可用。 */
     async function verifyToken() {
-      const msg = document.getElementById('loginMessage');
       try {
-        const resp = await fetch('/keys', {
+        const resp = await fetch('/keys?page=1&page_size=1', {
           headers: { 'Authorization': 'Bearer ' + adminToken }
         });
-
-        if (resp.ok) {
-          sessionStorage.setItem('admin_token', adminToken);
-          document.getElementById('loginPanel').style.display = 'none';
-          document.getElementById('adminPanel').classList.add('active');
-          document.getElementById('querySection').classList.add('active');
-          document.getElementById('logoutBtn').style.display = 'block';
-          msg.className = 'message';
-          msg.style.display = 'none';
-          loadUserList();
-        } else {
-          throw new Error('Token 无效');
-        }
-      } catch (e) {
-        msg.className = 'message error';
-        msg.textContent = '认证失败: ' + e.message;
-        msg.style.display = 'block';
+        if (!resp.ok) throw new Error('Token 无效');
+        sessionStorage.setItem('admin_token', adminToken);
+        $('loginPanel').style.display = 'none';
+        $('adminPanel').classList.add('active');
+        $('querySection').classList.add('active');
+        $('logoutBtn').style.display = 'block';
+        $('loginMessage').style.display = 'none';
+        state.page = 1;
+        await loadUsers();
+      } catch (err) {
         adminToken = '';
         sessionStorage.removeItem('admin_token');
+        setMessage('loginMessage', '认证失败: ' + err.message, 'error');
       }
     }
 
+    /** 清除 Token 并恢复未登录界面。 */
     function logout() {
       adminToken = '';
       sessionStorage.removeItem('admin_token');
-      document.getElementById('loginPanel').style.display = 'block';
-      document.getElementById('adminPanel').classList.remove('active');
-      document.getElementById('querySection').classList.remove('active');
-      document.getElementById('logoutBtn').style.display = 'none';
-      document.getElementById('tokenInput').value = '';
+      $('loginPanel').style.display = 'block';
+      $('adminPanel').classList.remove('active');
+      $('querySection').classList.remove('active');
+      $('logoutBtn').style.display = 'none';
+      $('tokenInput').value = '';
     }
 
-    async function loadUserList() {
-      try {
-        const resp = await fetch('/keys', {
-          headers: { 'Authorization': 'Bearer ' + adminToken }
-        });
-        const data = await resp.json();
-        const tbody = document.getElementById('userTableBody');
+    /** 分页加载用户，并并发拉取每个用户的元数据。 */
+    async function loadUsers() {
+      const tbody = $('userTableBody');
+      tbody.replaceChildren();
+      const loading = document.createElement('tr');
+      const loadingCell = document.createElement('td');
+      loadingCell.colSpan = 5;
+      loadingCell.textContent = '加载中...';
+      loading.appendChild(loadingCell);
+      tbody.appendChild(loading);
 
-        if (data.users && data.users.length > 0) {
-          // 获取每个用户的元数据
-          const rows = await Promise.all(data.users.map(async (username) => {
-            try {
-              const metaResp = await fetch('/keys/' + username + '/metadata', {
-                headers: { 'Authorization': 'Bearer ' + adminToken }
-              });
-              const metaData = await metaResp.json();
-              const source = metaData.metadata?.source || '-';
-              const time = metaData.metadata?.updated_at ? new Date(metaData.metadata.updated_at).toLocaleString('zh-CN') : '-';
-              return '<tr>' +
-                '<td>' + username + '</td>' +
-                '<td>' + source + '</td>' +
-                '<td>' + time + '</td>' +
-                '<td><button class="btn btn-danger btn-sm" onclick="deleteKey(\'' + username + '\')">删除</button></td>' +
-              '</tr>';
-            } catch {
-              return '<tr>' +
-                '<td>' + username + '</td>' +
-                '<td>-</td>' +
-                '<td>-</td>' +
-                '<td><button class="btn btn-danger btn-sm" onclick="deleteKey(\'' + username + '\')">删除</button></td>' +
-              '</tr>';
-            }
-          }));
-          tbody.innerHTML = rows.join('');
-        } else {
-          tbody.innerHTML = '<tr><td colspan="4">暂无用户</td></tr>';
+      try {
+        const params = new URLSearchParams({
+          page: String(state.page),
+          page_size: String(state.pageSize),
+          q: state.query
+        });
+        const resp = await api('/keys?' + params.toString());
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || '加载失败');
+
+        state.total = data.total || 0;
+        $('pageInfo').textContent = '第 ' + state.page + ' 页 / 共 ' + state.total + ' 个用户';
+        $('prevBtn').disabled = state.page <= 1;
+        $('nextBtn').disabled = state.page * state.pageSize >= state.total;
+
+        tbody.replaceChildren();
+        if (!Array.isArray(data.users) || data.users.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 5;
+          cell.className = 'muted';
+          cell.textContent = '暂无用户';
+          row.appendChild(cell);
+          tbody.appendChild(row);
+          return;
         }
-      } catch (e) {
-        console.error('Failed to load users:', e);
+
+        const rows = await Promise.all(data.users.map(async (username) => {
+          let count = '-';
+          let sources = '-';
+          let updated = '-';
+          try {
+            const metaResp = await api('/keys/' + encodeURIComponent(username) + '/metadata');
+            if (metaResp.ok) {
+              const meta = await metaResp.json();
+              count = String(meta.count ?? (meta.keys ? meta.keys.length : 0));
+              const sourceSet = new Set((meta.keys || []).map((key) => key.source).filter(Boolean));
+              sources = sourceSet.size > 0 ? Array.from(sourceSet).join(', ') : '-';
+              const latest = (meta.keys || []).map((key) => key.updated_at).filter(Boolean).sort().pop();
+              updated = formatTime(latest);
+            }
+          } catch (err) {
+            console.error('Failed to load metadata for', username, err);
+          }
+
+          const tr = document.createElement('tr');
+          const nameCell = document.createElement('td');
+          nameCell.textContent = username;
+          const countCell = document.createElement('td');
+          countCell.textContent = count;
+          const sourceCell = document.createElement('td');
+          sourceCell.textContent = sources;
+          const timeCell = document.createElement('td');
+          timeCell.textContent = updated;
+          const actionCell = document.createElement('td');
+          const del = document.createElement('button');
+          del.className = 'btn btn-danger btn-sm';
+          del.type = 'button';
+          del.textContent = '删除';
+          del.dataset.username = username;
+          actionCell.appendChild(del);
+          tr.append(nameCell, countCell, sourceCell, timeCell, actionCell);
+          return tr;
+        }));
+        tbody.replaceChildren(...rows);
+      } catch (err) {
+        tbody.replaceChildren();
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5;
+        cell.className = 'muted';
+        cell.textContent = '加载失败: ' + err.message;
+        row.appendChild(cell);
+        tbody.appendChild(row);
       }
     }
 
+    /** 查询指定用户的全部公钥并展示。 */
     async function queryKey() {
-      const username = document.getElementById('queryUser').value.trim();
+      const username = $('queryUser').value.trim();
       if (!username) return;
-
-      const result = document.getElementById('queryResult');
+      const result = $('queryResult');
+      result.className = 'query-result active';
       try {
-        const resp = await fetch('/keys/' + username, {
-          headers: { 'Authorization': 'Bearer ' + adminToken }
-        });
-
+        const resp = await api('/keys/' + encodeURIComponent(username));
         if (resp.ok) {
-          const key = await resp.text();
-          result.textContent = key;
-          result.className = 'query-result active';
+          result.textContent = await resp.text();
         } else {
           const err = await resp.json();
           result.textContent = '错误: ' + (err.error || '用户不存在');
-          result.className = 'query-result active';
-          result.style.color = '#dc2626';
+          result.className = 'query-result active error';
         }
-      } catch (e) {
-        result.textContent = '查询失败: ' + e.message;
-        result.className = 'query-result active';
-        result.style.color = '#dc2626';
+      } catch (err) {
+        result.textContent = '查询失败: ' + err.message;
+        result.className = 'query-result active error';
       }
     }
 
-    async function addKey() {
-      const username = document.getElementById('addUsername').value.trim();
-      const publicKey = document.getElementById('addPublicKey').value.trim();
-      const source = document.getElementById('addSource').value.trim();
-
-      if (!username || !publicKey) {
-        showMessage('adminMessage', '用户名和公钥不能为空', 'error');
+    /** 按勾选模式全量替换或追加公钥。 */
+    async function submitKeys() {
+      const username = $('addUsername').value.trim();
+      const lines = $('addPublicKey').value.split('\n').map((line) => line.trim()).filter(Boolean);
+      const source = $('addSource').value.trim();
+      if (!username || lines.length === 0) {
+        setMessage('adminMessage', '用户名和公钥不能为空', 'error');
         return;
       }
 
+      const replace = $('replaceAll').checked;
       try {
-        const resp = await fetch('/keys/' + username, {
-          method: 'PUT',
-          headers: {
-            'Authorization': 'Bearer ' + adminToken,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ public_key: publicKey, source: source })
+        const resp = await api('/keys/' + encodeURIComponent(username), {
+          method: replace ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys: lines.map((publicKey) => ({ public_key: publicKey, source })) })
         });
-
         const data = await resp.json();
-        if (data.success) {
-          showMessage('adminMessage', '添加成功', 'success');
-          document.getElementById('addUsername').value = '';
-          document.getElementById('addPublicKey').value = '';
-          document.getElementById('addSource').value = '';
-          loadUserList();
-          loadStats();
-        } else {
-          showMessage('adminMessage', '添加失败: ' + data.error, 'error');
-        }
-      } catch (e) {
-        showMessage('adminMessage', '添加失败: ' + e.message, 'error');
+        if (!resp.ok) throw new Error(data.error || '提交失败');
+
+        setMessage('adminMessage', (replace ? '替换' : '追加') + '成功，当前 ' + data.count + ' 把公钥', 'success');
+        $('addUsername').value = '';
+        $('addPublicKey').value = '';
+        $('addSource').value = '';
+        $('replaceAll').checked = false;
+        $('fileHint').textContent = '';
+        await loadUsers();
+        await loadStats();
+      } catch (err) {
+        setMessage('adminMessage', '提交失败: ' + err.message, 'error');
       }
     }
 
-    async function deleteKey(username) {
-      if (!confirm('确定删除用户 ' + username + ' 的公钥？')) return;
-
+    /** 删除用户全部公钥，成功后刷新列表与统计。 */
+    async function deleteUser(username) {
+      if (!confirm('确定删除用户 ' + username + ' 的全部公钥？')) return;
       try {
-        const resp = await fetch('/keys/' + username, {
-          method: 'DELETE',
-          headers: { 'Authorization': 'Bearer ' + adminToken }
-        });
-
+        const resp = await api('/keys/' + encodeURIComponent(username), { method: 'DELETE' });
         const data = await resp.json();
-        if (data.success) {
-          showMessage('adminMessage', '删除成功', 'success');
-          loadUserList();
-          loadStats();
-        } else {
-          showMessage('adminMessage', '删除失败: ' + data.error, 'error');
-        }
-      } catch (e) {
-        showMessage('adminMessage', '删除失败: ' + e.message, 'error');
+        if (!resp.ok) throw new Error(data.error || '删除失败');
+        setMessage('adminMessage', '删除成功，共 ' + data.removed + ' 把公钥', 'success');
+        await loadUsers();
+        await loadStats();
+      } catch (err) {
+        setMessage('adminMessage', '删除失败: ' + err.message, 'error');
       }
     }
 
-    function showMessage(elementId, text, type) {
-      const msg = document.getElementById(elementId);
-      msg.textContent = text;
-      msg.className = 'message ' + type;
-      msg.style.display = 'block';
-      setTimeout(() => { msg.style.display = 'none'; }, 3000);
-    }
-
-    // 回车键触发查询
-    document.getElementById('queryUser').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') queryKey();
-    });
-
-    // 回车键触发登录
-    document.getElementById('tokenInput').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') login();
-    });
-
-    // 文件选择读取公钥
-    function loadKeyFile(input) {
-      const file = input.files[0];
+    /** 读取本地公钥文件并填入多行输入框。 */
+    function loadKeyFile(file) {
       if (!file) return;
-      
       const reader = new FileReader();
-      reader.onload = function(e) {
-        document.getElementById('addPublicKey').value = e.target.result.trim();
-        document.getElementById('fileHint').textContent = '✓ ' + file.name;
+      reader.onload = (event) => {
+        const text = String(event.target.result || '').trim();
+        const textarea = $('addPublicKey');
+        textarea.value = textarea.value.trim() ? textarea.value.trim() + '\n' + text : text;
+        $('fileHint').textContent = '已读取 ' + file.name;
       };
-      reader.onerror = function() {
-        document.getElementById('fileHint').textContent = '✗ 读取失败';
-      };
+      reader.onerror = () => { $('fileHint').textContent = '读取失败'; };
       reader.readAsText(file);
     }
+
+    $('loginBtn').addEventListener('click', login);
+    $('logoutBtn').addEventListener('click', logout);
+    $('queryBtn').addEventListener('click', queryKey);
+    $('addBtn').addEventListener('click', submitKeys);
+    $('searchBtn').addEventListener('click', () => {
+      state.query = $('searchInput').value.trim();
+      state.page = 1;
+      loadUsers();
+    });
+    $('prevBtn').addEventListener('click', () => {
+      if (state.page > 1) { state.page -= 1; loadUsers(); }
+    });
+    $('nextBtn').addEventListener('click', () => {
+      if (state.page * state.pageSize < state.total) { state.page += 1; loadUsers(); }
+    });
+    $('fileBtn').addEventListener('click', () => $('keyFile').click());
+    $('keyFile').addEventListener('change', (event) => loadKeyFile(event.target.files[0]));
+    $('queryUser').addEventListener('keypress', (event) => { if (event.key === 'Enter') queryKey(); });
+    $('tokenInput').addEventListener('keypress', (event) => { if (event.key === 'Enter') login(); });
+    $('searchInput').addEventListener('keypress', (event) => { if (event.key === 'Enter') $('searchBtn').click(); });
+    $('userTableBody').addEventListener('click', (event) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.dataset.username) {
+        deleteUser(target.dataset.username);
+      }
+    });
+
+    window.addEventListener('load', async () => {
+      await loadStats();
+      const saved = sessionStorage.getItem('admin_token');
+      if (saved) {
+        adminToken = saved;
+        await verifyToken();
+      }
+    });
   </script>
 </body>
 </html>

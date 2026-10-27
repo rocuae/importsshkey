@@ -8,19 +8,18 @@ User=iskey-server
 Group=iskey-server
 WorkingDirectory=/opt/iskey-server
 ExecStart=/opt/iskey-server/iskey-server server -f
-ExecReload=/bin/kill -HUP $MAINPID
-Restart=always
+Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=iskey-server
 
-# 环境变量配置（可根据需要修改）
+# 密钥放在环境文件中，不要写在本 unit 里；文件权限应为 0600
+EnvironmentFile=-/etc/iskey-server.env
 Environment=SERVER_HOST=0.0.0.0
 Environment=SERVER_PORT=8080
 Environment=DB_DRIVER=sqlite
 Environment=DB_PATH=/opt/iskey-server/iskey.db
-Environment=ADMIN_TOKEN=your-super-secure-admin-token-here
 Environment=ALLOWED_ORIGINS=*
 Environment=LOG_LEVEL=info
 

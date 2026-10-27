@@ -1,4 +1,4 @@
-.PHONY: build build-cli build-server test test-e2e lint clean
+.PHONY: build build-cli build-server test test-e2e lint clean build-cli-rust test-rust lint-rust cf-test cf-lint
 
 # 构建所有
 build: build-cli build-server
@@ -20,16 +20,18 @@ test:
 test-e2e: build-server
 	./test-e2e.sh
 
-# 代码检查
+# 代码检查（固定 golangci-lint v2，避免本地版本差异）
+GOLANGCI_LINT_VERSION ?= v2.15.0
+
 lint:
-	cd iskey && golangci-lint run ./...
+	cd iskey && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./...
+	cd go-server && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./...
 
 # 清理
 clean:
 	rm -rf bin/
-	rm -f test.db
-	rm -rf go-server/*.db
-	rm -f go-server/config.yaml
+	rm -f test.db iskey-server.log go-server/iskey-server.log
+	rm -rf go-server/*.db data/
 
 # 安装依赖
 deps:
@@ -63,6 +65,10 @@ cf-deps:
 cf-lint:
 	cd cf-server && npx tsc --noEmit
 
+# CF Server 单元测试
+cf-test:
+	cd cf-server && npm test -- --run
+
 # CF Server 本地开发
 cf-dev:
 	cd cf-server && npx wrangler dev
@@ -70,3 +76,16 @@ cf-dev:
 # CF Server 部署
 cf-deploy:
 	cd cf-server && npx wrangler deploy
+
+# Rust CLI 构建（输出 bin/iskey-rust，便于与 Go 版共存）
+build-cli-rust:
+	cd iskey-rust && cargo build --release
+	cp iskey-rust/target/release/iskey bin/iskey-rust
+
+# Rust CLI 测试
+test-rust:
+	cd iskey-rust && cargo test
+
+# Rust CLI 检查（fmt + clippy）
+lint-rust:
+	cd iskey-rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings

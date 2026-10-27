@@ -5,61 +5,47 @@ import (
 	"github.com/rocuae/importsshkey/go-server/internal/model"
 )
 
-// UserRepository 用户数据仓储接口
-// 定义用户公钥的 CRUD 操作
-type UserRepository interface {
-	// CreateOrUpdate 创建或更新用户公钥
-	// 参数：
-	//   - user: 用户实体
-	// 返回：
-	//   - error: 数据库错误
-	CreateOrUpdate(user *model.User) error
+// UserKeyRepository 公钥数据仓储接口
+type UserKeyRepository interface {
+	// ListByUsername 查询用户的全部公钥
+	ListByUsername(username string) ([]*model.UserKey, error)
 
-	// GetByUsername 根据用户名查询用户
-	// 参数：
-	//   - username: 用户名
-	// 返回：
-	//   - *model.User: 用户实体（不存在返回 nil）
-	//   - error: 数据库错误
-	GetByUsername(username string) (*model.User, error)
+	// Add 添加单把公钥；同一用户下指纹重复时更新来源
+	Add(key *model.UserKey) error
 
-	// DeleteByUsername 根据用户名删除用户
-	// 参数：
-	//   - username: 用户名
-	// 返回：
-	//   - error: 数据库错误
-	DeleteByUsername(username string) error
+	// AddMany 批量添加公钥（单事务）
+	AddMany(keys []*model.UserKey) error
 
-	// ListAll 查询所有用户
-	// 返回：
-	//   - []*model.User: 用户列表
-	//   - error: 数据库错误
-	ListAll() ([]*model.User, error)
+	// Replace 全量替换用户的所有公钥（单事务）
+	Replace(username string, keys []*model.UserKey) error
+
+	// DeleteByUsername 删除用户的全部公钥，返回删除数量
+	DeleteByUsername(username string) (int64, error)
+
+	// DeleteByFingerprint 删除用户指定指纹的公钥，返回删除数量
+	DeleteByFingerprint(username, fingerprint string) (int64, error)
+
+	// ListUsers 分页列出用户名，支持模糊搜索
+	ListUsers(query string, offset, limit int) ([]string, int64, error)
+
+	// CountUsers 统计不同用户数
+	CountUsers() (int64, error)
+
+	// CountKeys 统计公钥总数
+	CountKeys() (int64, error)
 
 	// Exists 检查用户是否存在
-	// 参数：
-	//   - username: 用户名
-	// 返回：
-	//   - bool: 是否存在
-	//   - error: 数据库错误
 	Exists(username string) (bool, error)
 }
 
 // AuditLogRepository 审计日志仓储接口
 type AuditLogRepository interface {
 	// Create 创建审计日志
-	// 参数：
-	//   - log: 审计日志实体
-	// 返回：
-	//   - error: 数据库错误
 	Create(log *model.AuditLog) error
 
 	// ListByUsername 查询指定用户的审计日志
-	// 参数：
-	//   - username: 用户名
-	//   - limit: 返回数量限制
-	// 返回：
-	//   - []*model.AuditLog: 日志列表
-	//   - error: 数据库错误
 	ListByUsername(username string, limit int) ([]*model.AuditLog, error)
+
+	// ListRecent 查询最近的审计日志
+	ListRecent(limit int) ([]*model.AuditLog, error)
 }
