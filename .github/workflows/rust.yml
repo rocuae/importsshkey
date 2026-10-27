@@ -24,12 +24,18 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install arm64 cross toolchain
+        if: matrix.arch == 'arm64'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Test
         run: |
           cd iskey-rust
           cargo test
 
       - name: Build for ${{ matrix.arch }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
           cd iskey-rust
           cargo build --release --target ${{ matrix.target }}
